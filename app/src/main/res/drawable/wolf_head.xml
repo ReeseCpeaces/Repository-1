@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Head, neck joint and ear. Pieces of art/wolf.svg, split so the head and tail can move. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <path android:fillColor="#05232E" android:pathData="M312,262 a40,40 0 1,0 80,0 a40,40 0 1,0 -80,0 z"/>
+  <group>
+    <clip-path android:pathData="M300,0 H512 V262 H300 Z"/>
+    <path android:fillColor="#05232E" android:pathData="M512,83.478H411.826v-11.13c0-18.442-14.95-33.391-33.391-33.391v44.522l-55.652,81.753 l-27.826,68.508l27.826,76.466l22.261,4.687v158.151h33.391V318.718c11.94-0.383,23.179-2.784,33.391-6.949 c13.035-5.315,24.395-13.499,33.391-24.026c13.98-16.356,22.261-38.359,22.261-64.022V135.42L512,128V83.478z"/>
+  </group>
+    <path android:fillColor="#6B8F9C" android:pathData="M467.478,72.348c0-18.442-14.95-33.391-33.391-33.391v44.522l17.438,12.986l15.953-12.986V72.348z"/>
+</vector>

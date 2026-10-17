@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Grove" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/grove_bg</item>
+        <item name="android:statusBarColor">@color/grove_bg</item>
+        <item name="android:navigationBarColor">@color/grove_bg</item>
+    </style>
+    <style name="Theme.Grove.Dialog" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>

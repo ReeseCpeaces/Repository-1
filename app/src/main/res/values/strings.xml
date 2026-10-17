@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Grove</string>
+    <string name="widget_today">Grove: calendar and today</string>
+    <string name="widget_today_desc">Month calendar with today\'s habits and tasks</string>
+    <string name="widget_holy">Grove: Wheel of the Year</string>
+    <string name="widget_holy_desc">Upcoming holy days with countdowns</string>
+</resources>

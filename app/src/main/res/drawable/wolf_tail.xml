@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tail. Pieces of art/wolf.svg, split so the head and tail can move. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+  <group>
+    <clip-path android:pathData="M0,0 H122 V300 H0 Z"/>
+    <path android:fillColor="#325763" android:pathData="M0,198.776c21.994,30.254,59.069,48.279,98.95,44.111c16.801-1.756,32.293-7.275,45.746-15.615 v89.945h-33.391v155.826h33.391V372.87c11.813,0,23.077-2.321,33.391-6.497c30.404-12.311,52.445-40.915,55.31-74.993 c0.209-2.492,0.342-5.006,0.342-7.552V174.443L0,198.776z"/>
+  </group>
+</vector>

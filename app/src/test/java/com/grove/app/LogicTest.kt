@@ -1,0 +1,88 @@
+package com.grove.app
+
+import com.grove.app.data.AppData
+import com.grove.app.data.DayRecord
+import com.grove.app.data.Habit
+import com.grove.app.data.Logic
+import com.grove.app.data.Role
+import com.grove.app.data.Seed
+import com.grove.app.data.Step
+import com.grove.app.obsidian.NoteText
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDate
+import java.time.LocalDateTime
+
+class LogicTest {
+    private val habit = Habit("h", "Read", steps = listOf(Step("Read")), created = "2026-10-01")
+
+    private fun data(today: String, doneDays: List<String>) = AppData(
+        habits = listOf(habit),
+        currentDay = today,
+        days = doneDays.associateWith { DayRecord(steps = mapOf("h" to listOf(0))) },
+    )
+
+    @Test fun oneMissedDayPausesTheStreak() {
+        // done 10, 11, (miss 12), 13, 14; today 15 not done yet
+        val d = data("2026-10-15", listOf("2026-10-10", "2026-10-11", "2026-10-13", "2026-10-14"))
+        assertEquals(4, Logic.streak(d, habit))
+    }
+
+    @Test fun twoMissedDaysResetTheStreak() {
+        val d = data("2026-10-15", listOf("2026-10-10", "2026-10-11", "2026-10-14"))
+        assertEquals(1, Logic.streak(d, habit))
+    }
+
+    @Test fun todayCountsOnceDone() {
+        val d = data("2026-10-15", listOf("2026-10-14", "2026-10-15"))
+        assertEquals(2, Logic.streak(d, habit))
+        assertEquals(Logic.StreakState.OK, Logic.streakState(d, habit))
+    }
+
+    @Test fun missedYesterdayIsPaused() {
+        val d = data("2026-10-15", listOf("2026-10-13"))
+        assertEquals(Logic.StreakState.PAUSED, Logic.streakState(d, habit))
+    }
+
+    @Test fun dayDoesNotRollAtMidnight() {
+        val d = data("2026-10-15", emptyList())
+        assertEquals("2026-10-15", Logic.rolledDay(d, LocalDateTime.of(2026, 10, 16, 3, 0)))
+        assertEquals("2026-10-16", Logic.rolledDay(d, LocalDateTime.of(2026, 10, 16, 14, 0)))
+        assertEquals("2026-10-17", Logic.rolledDay(d, LocalDateTime.of(2026, 10, 17, 3, 0)))
+    }
+
+    @Test fun morningPracticeStartsTheNewDay() {
+        val seed = Seed.data(LocalDate.of(2026, 10, 15))
+        val morning = seed.habits.first { it.role == Role.MORNING }
+        val next = Logic.toggleHabit(seed, morning.id, LocalDateTime.of(2026, 10, 16, 9, 0))
+        assertEquals("2026-10-16", next.currentDay)
+        assertTrue(Logic.isDoneToday(next, morning))
+    }
+
+    @Test fun saturdayHasPlantStudy() {
+        val seed = Seed.data(LocalDate.of(2026, 10, 17))
+        assertEquals(listOf("Plant study + nature time (1–2 hrs)"), Logic.tasksOn(seed, LocalDate.of(2026, 10, 17)).map { it.name })
+    }
+
+    @Test fun notePathAndWeek() {
+        assertEquals("Journal/Daily notes/2026/October/2026-10-17.md",
+            NoteText.path("Journal/Daily notes/{yyyy}/{MMMM}/{yyyy-MM-dd}.md", LocalDate.of(2026, 10, 17)))
+        assertEquals("## Week [[Weekly/2026-W42]]",
+            NoteText.fillTemplate("## Week [[Weekly/<% tp.date.now(\"GGGG-[W]WW\") %>]]", LocalDate.of(2026, 10, 17)))
+    }
+
+    @Test fun propertiesKeepOtherLines() {
+        val note = "---\nDaily Note:\nsphere of protection:\ndate:\n---\n## Daily Log\n"
+        val out = NoteText.applyProperties(note, mapOf("sphere of protection" to true, "discursive meditation" to false))
+        assertEquals("---\nDaily Note:\nsphere of protection: true\ndate:\ndiscursive meditation: false\n---\n## Daily Log\n", out)
+    }
+
+    @Test fun summaryGoesUnderDailyLogAndIsReplaced() {
+        val note = "---\n---\n## Daily Log\nmy own words\n"
+        val once = NoteText.applySummary(note, "A")
+        assertEquals("---\n---\n## Daily Log\n${NoteText.START}\nA\n${NoteText.END}\n\nmy own words\n", once)
+        val twice = NoteText.applySummary(once, "B")
+        assertEquals(once.replace("\nA\n", "\nB\n"), twice)
+    }
+}
