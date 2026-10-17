@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.grove.app.data.AppData
+import com.grove.app.data.DayRecord
 import com.grove.app.data.Habit
 import com.grove.app.data.HolyDay
 import com.grove.app.data.Settings
@@ -24,6 +25,14 @@ data class SharedSetup(
     val settings: Settings,
 )
 
+/** Check-in history, written for the Grove connector to read. The app never reads it back. */
+@Serializable
+data class SharedHistory(
+    val version: Int = 1,
+    val currentDay: String,
+    val days: Map<String, DayRecord>,
+)
+
 /**
  * Keeps Grove's setup in the vault at Grove/grove.json, which Syncthing carries to the server.
  * The app writes the file when its setup changes, and applies the file when someone else edited it.
@@ -34,6 +43,7 @@ object VaultSync {
     private const val DIR = "Grove"
     private const val FILE = "grove.json"
     private const val README = "README.md"
+    private const val HISTORY = "history.json"
     private const val PREFS = "vault_sync"
     private const val KEY_LAST = "last_text_hash"
 
@@ -67,8 +77,18 @@ object VaultSync {
     /** Write the setup out after it changes in the app. */
     fun exportAsync(context: Context, old: AppData?, new: AppData) {
         if (new.settings.vaultUri.isEmpty()) return
-        if (old != null && setupOf(old) == setupOf(new) && old.settings.vaultUri == new.settings.vaultUri) return
-        worker.execute { runCatching { export(context, new) }.onFailure { Log.w(TAG, "Export failed", it) } }
+        val vaultChanged = old == null || old.settings.vaultUri != new.settings.vaultUri
+        if (vaultChanged || setupOf(old!!) != setupOf(new)) {
+            worker.execute { runCatching { export(context, new) }.onFailure { Log.w(TAG, "Export failed", it) } }
+        }
+        if (vaultChanged || old!!.days != new.days || old.currentDay != new.currentDay) {
+            worker.execute { runCatching { exportHistory(context, new) }.onFailure { Log.w(TAG, "History export failed", it) } }
+        }
+    }
+
+    private fun exportHistory(context: Context, data: AppData) {
+        val dir = folder(context, data) ?: return
+        write(context, dir, HISTORY, json.encodeToString(SharedHistory.serializer(), SharedHistory(currentDay = data.currentDay, days = data.days)) + "\n")
     }
 
     private fun export(context: Context, data: AppData) {
@@ -106,7 +126,7 @@ object VaultSync {
         `grove.json` in this folder is the setup for the Grove app on the phone: habits, tasks, reminders,
         holy days and settings. Edit it (by hand or ask Claude), and Syncthing carries it to the phone;
         Grove applies it the next time the app opens. The app writes its own changes back here.
-        Check-in history and streaks stay in the app and are not in this file.
+        Check-in history is in `history.json` (written by the app, read-only for everyone else).
 
         Rules for editing:
         - Keep it valid JSON. If Grove can't read it, it ignores the file and keeps its current setup.

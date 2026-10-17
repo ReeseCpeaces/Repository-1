@@ -8,6 +8,8 @@ import com.grove.app.data.Role
 import com.grove.app.data.Seed
 import com.grove.app.data.Step
 import com.grove.app.obsidian.NoteText
+import com.grove.app.obsidian.SharedSetup
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,5 +86,19 @@ class LogicTest {
         assertEquals("---\n---\n## Daily Log\n${NoteText.START}\nA\n${NoteText.END}\n\nmy own words\n", once)
         val twice = NoteText.applySummary(once, "B")
         assertEquals(once.replace("\nA\n", "\nB\n"), twice)
+    }
+
+    @Test fun readsSetupWrittenByTheConnector() {
+        // Shape written by connector/grove_core.py (snake-free camelCase keys, extra version field).
+        val text = """{"version": 1, "habits": [{"id": "h3", "name": "Discursive meditation", "whenText": "Any time today",
+            "days": [true, true, true, true, true, true, true], "steps": [{"label": "Meditate", "prop": "discursive meditation"}],
+            "reminders": ["21:00"], "nag": true, "nagMinutes": 15, "pinned": true, "role": "", "created": "2026-10-15"}],
+            "tasks": [{"id": "t2", "name": "Email GCC", "list": "Inbox", "days": [false, false, false, false, false, false, false],
+            "date": "2026-10-30", "time": "15:00", "firstOfMonth": false, "prop": "", "high": false, "reminders": ["15:00"],
+            "nag": true, "nagMinutes": 30}], "holyDays": [], "settings": {"vaultUri": "", "dailyNotePath": "x", "templatePath": "",
+            "cutoffHour": 14, "defaultSnoozeMinutes": 10, "wolfName": ""}}"""
+        val setup = Json { ignoreUnknownKeys = true }.decodeFromString(SharedSetup.serializer(), text)
+        assertEquals("discursive meditation", setup.habits[0].steps[0].prop)
+        assertEquals("2026-10-30", setup.tasks[0].date)
     }
 }
