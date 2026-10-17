@@ -6,9 +6,9 @@ with your streaks, watched over by a wolf.
 
 ## Getting the app
 
-Every push builds an APK with GitHub Actions (**Actions › Build APK › latest run › Artifacts ›
-grove-apk**). Download it on the phone, unzip, and open `app-release.apk` to install
-(allow "Install unknown apps" for your browser or file manager when asked).
+Every push builds an APK with GitHub Actions and publishes it to the **latest** release
+(Releases › Grove (latest build) › `grove.apk`). Open that on the phone to install or update
+(allow "Install unknown apps" for your browser when asked).
 
 ## Layout
 
