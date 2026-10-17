@@ -8,10 +8,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -27,13 +27,15 @@ sealed interface Screen {
     data object Settings : Screen
     data class HabitDetail(val id: String) : Screen
     data class EditHabit(val id: String?) : Screen
-    data class EditTask(val id: String?) : Screen
+    data class EditTask(val id: String?, val date: String? = null, val time: String? = null) : Screen
+    data class Day(val date: String) : Screen
 }
 
 class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_HABIT = "habit"
         const val EXTRA_SCREEN = "screen"
+        const val EXTRA_DAY = "day"
     }
 
     private val stack = mutableStateListOf<Screen>(Screen.Today)
@@ -48,7 +50,10 @@ class MainActivity : ComponentActivity() {
         handle(intent)
         setContent {
             GroveTheme {
-                Box(Modifier.fillMaxSize().background(GroveColors.Bg).safeDrawingPadding()) { App() }
+                // Surface sets light text as the default, so no text falls back to black on the dark background.
+                Surface(Modifier.fillMaxSize(), color = GroveColors.Bg, contentColor = GroveColors.Text) {
+                    Box(Modifier.fillMaxSize().safeDrawingPadding()) { App() }
+                }
             }
         }
     }
@@ -65,8 +70,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handle(intent: Intent?) {
         val habit = intent?.getStringExtra(EXTRA_HABIT)
+        val day = intent?.getStringExtra(EXTRA_DAY)
         if (habit != null) {
             stack.clear(); stack += Screen.Today; stack += Screen.HabitDetail(habit)
+        } else if (day != null) {
+            stack.clear(); stack += Screen.Today; stack += Screen.Day(day)
         }
     }
 
@@ -84,7 +92,8 @@ class MainActivity : ComponentActivity() {
             Screen.Settings -> SettingsScreen(data, ::back)
             is Screen.HabitDetail -> HabitScreen(data, s.id, ::go, ::back)
             is Screen.EditHabit -> EditHabitScreen(data, s.id, ::back)
-            is Screen.EditTask -> EditTaskScreen(data, s.id, ::back)
+            is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back)
+            is Screen.Day -> DayScreen(data, s.date, ::go, ::back)
         }
     }
 }

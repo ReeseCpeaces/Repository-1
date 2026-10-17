@@ -60,6 +60,8 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                     IconButton(onClick = { go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
                 }
                 Tabs(forest = false, onToday = {}, onForest = { tab(Screen.Forest) })
+                // Tap a day to open its hour-by-hour view.
+                WeekStrip(data, LocalDate.now()) { go(Screen.Day(it.toString())) }
             }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {

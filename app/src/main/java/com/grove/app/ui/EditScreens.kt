@@ -112,18 +112,18 @@ fun EditHabitScreen(data: AppData, id: String?, back: () -> Unit) {
 }
 
 @Composable
-fun EditTaskScreen(data: AppData, id: String?, back: () -> Unit) {
+fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, back: () -> Unit) {
     val context = LocalContext.current
     val old = data.tasks.firstOrNull { it.id == id }
     var name by remember { mutableStateOf(old?.name.orEmpty()) }
     var list by remember { mutableStateOf(old?.list ?: "Inbox") }
     val days = remember { mutableStateListOf<Boolean>().apply { addAll(old?.days ?: List(7) { false }) } }
-    var date by remember { mutableStateOf(old?.date?.ifEmpty { null } ?: LocalDate.now().toString()) }
-    var time by remember { mutableStateOf(old?.time ?: "16:30") }
+    var date by remember { mutableStateOf(old?.date?.ifEmpty { null } ?: date0 ?: LocalDate.now().toString()) }
+    var time by remember { mutableStateOf(old?.time ?: time0 ?: "16:30") }
     var firstOfMonth by remember { mutableStateOf(old?.firstOfMonth ?: false) }
     var prop by remember { mutableStateOf(old?.prop.orEmpty()) }
     var high by remember { mutableStateOf(old?.high ?: false) }
-    val reminders = remember { mutableStateListOf<String>().apply { addAll(old?.reminders ?: listOf("16:30")) } }
+    val reminders = remember { mutableStateListOf<String>().apply { addAll(old?.reminders ?: listOf(time0 ?: "16:30")) } }
     var nag by remember { mutableStateOf(old?.nag ?: true) }
     var nagMinutes by remember { mutableStateOf(old?.nagMinutes ?: 30) }
 
