@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     private val stack = mutableStateListOf<Screen>(Screen.Today)
 
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        Effects.refreshAll(applicationContext)
+        Thread { Effects.refreshAll(applicationContext) }.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

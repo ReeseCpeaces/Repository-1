@@ -64,6 +64,8 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                 Text(if (s.vaultUri.isEmpty()) "Choose vault folder" else "Change vault folder")
             }
             Text("Pick the vault's top folder (the one Syncthing keeps in sync).", fontSize = 12.sp, color = GroveColors.Muted)
+            Text("Grove keeps its setup in Grove/grove.json in the vault. Edits there (by hand or by Claude on your computer) are applied when you open the app; Grove/README.md explains the format.",
+                fontSize = 12.sp, color = GroveColors.Muted)
             OutlinedTextField(notePath, { notePath = it; saveSettings { st -> st.copy(dailyNotePath = it) } },
                 label = { Text("Daily note path") }, supportingText = { Text("Tokens: {yyyy} {MM} {MMMM} {dd} {yyyy-MM-dd}") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(templatePath, { templatePath = it; saveSettings { st -> st.copy(templatePath = it) } },
