@@ -17,6 +17,32 @@ Phone (Grove app)  <-- Syncthing -->  Server: vault/Grove/grove.json + history.j
 Nothing is sent anywhere else. In the setup below the connector is only reachable from your own
 computer or home network.
 
+## Quick start for Reese's setup (HOMESERVER + Claude Code on the Windows PC)
+
+Hand this section to Claude Code on the PC. It SSHes into the server (`reese@10.0.0.118`) to do steps 1–3.
+
+1. **Find the vault.** The main vault is on the Big Drive, most likely `/mnt/bigdrive/Obsidian`. Check that
+   `Grove/grove.json` exists inside it (it appears after Grove on the phone has the vault picked and Syncthing has synced).
+2. **Install** (on the server, as `reese`):
+   ```bash
+   git clone https://github.com/ReeseCpeaces/Repository-1.git ~/grove-src   # or copy the connector folder over
+   cd ~/grove-src && git checkout ccr-786ce96c-m5lntg && cd connector
+   python3 -m venv .venv          # if this fails: sudo apt install python3-venv (Reese types the password)
+   .venv/bin/pip install -r requirements.txt
+   .venv/bin/python -c "from grove_core import Grove; print(Grove('/mnt/bigdrive/Obsidian').overview())"
+   ```
+3. **Connect it to Claude Code on the PC** (run on the PC, in PowerShell). Claude Code starts the connector over SSH
+   whenever it needs it, so nothing new listens on the network:
+   ```powershell
+   claude mcp add --scope user grove -- ssh reese@10.0.0.118 /home/reese/grove-src/connector/.venv/bin/python /home/reese/grove-src/connector/grove_mcp.py --vault /mnt/bigdrive/Obsidian
+   ```
+   Away from home, the same works with the Tailscale address `100.94.19.79` if the PC is on Tailscale.
+4. **Check:** start `claude`, run `/mcp` and look for `grove`, then ask "What does my Grove look like today?"
+
+**From the phone:** start Claude Code on the PC with Remote Control (`claude remote-control`); that session shows up in
+the Claude app on the phone and has the grove connector. This keeps everything private: nothing on the server is
+exposed to the internet.
+
 ## Before you start
 
 1. Grove is installed, and in Grove › Settings you've chosen your vault folder.
@@ -107,11 +133,11 @@ This has no login, so **don't** forward port 8765 on your router. It's for your 
 Ask Claude: "What does my Grove look like today?" or "Add a Grove habit for discursive meditation
 at 9 PM." After an edit, open Grove on the phone once Syncthing has synced.
 
-## Later: using it from the phone's Claude app (not set up yet)
+## Why not a claude.ai connector like TickTick?
 
-Connectors added on claude.ai (like TickTick) are called from Anthropic's servers, so the connector
-would need a public HTTPS address (for example with Tailscale Funnel) **and a login** so nobody else
-can use it. That's a separate step; the options above don't need it.
+Connectors added on claude.ai are called from Anthropic's servers, so the connector would need a public
+internet address (Tailscale Funnel is a public address, unlike normal Tailscale) plus a login. That breaks
+the rule that nothing on the server is public, so use Remote Control (above) to reach it from the phone instead.
 
 ## Tests
 
