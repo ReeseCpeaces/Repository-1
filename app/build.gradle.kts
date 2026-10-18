@@ -19,11 +19,22 @@ android {
         versionName = "0.1.$build"
     }
 
+    // One permanent key, so every build can update the installed app. Android refuses an update
+    // signed with a different key ("App not installed"). This is a private, sideloaded app, so the
+    // key lives in the repo instead of in CI secrets.
+    signingConfigs {
+        create("grove") {
+            storeFile = file("grove-release.jks")
+            storePassword = "grove-sideload"
+            keyAlias = "grove"
+            keyPassword = "grove-sideload"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Sideloaded personal app: sign release builds with the debug key so the APK installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("grove")
         }
     }
     compileOptions {

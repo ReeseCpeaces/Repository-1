@@ -77,13 +77,41 @@ object VaultSync {
     /** Write the setup out after it changes in the app. */
     fun exportAsync(context: Context, old: AppData?, new: AppData) {
         if (new.settings.vaultUri.isEmpty()) return
-        val vaultChanged = old == null || old.settings.vaultUri != new.settings.vaultUri
-        if (vaultChanged || setupOf(old!!) != setupOf(new)) {
+        if (old == null || old.settings.vaultUri != new.settings.vaultUri) {
+            worker.execute { runCatching { adoptOrExport(context) }.onFailure { Log.w(TAG, "Vault setup failed", it) } }
+            return
+        }
+        if (setupOf(old) != setupOf(new)) {
             worker.execute { runCatching { export(context, new) }.onFailure { Log.w(TAG, "Export failed", it) } }
         }
-        if (vaultChanged || old!!.days != new.days || old.currentDay != new.currentDay) {
+        if (old.days != new.days || old.currentDay != new.currentDay) {
             worker.execute { runCatching { exportHistory(context, new) }.onFailure { Log.w(TAG, "History export failed", it) } }
         }
+    }
+
+    /**
+     * Just after the vault folder is picked. If the vault already has a Grove setup (say, after
+     * reinstalling the app), restore from it instead of overwriting it with the fresh install's.
+     */
+    private fun adoptOrExport(context: Context) {
+        val data = Store.get(context)
+        val dir = folder(context, data) ?: return
+        if (dir.findFile(FILE) == null) {
+            export(context, data)
+            exportHistory(context, data)
+            return
+        }
+        restoreHistoryIfEmpty(context, dir)
+        importIfChanged(context, force = true)
+    }
+
+    /** Bring back check-ins from history.json when this install has none of its own. */
+    private fun restoreHistoryIfEmpty(context: Context, dir: DocumentFile) {
+        val hasOwn = Store.get(context).days.values.any { r -> r.tasks.isNotEmpty() || r.steps.values.any { it.isNotEmpty() } }
+        if (hasOwn) return
+        val text = dir.findFile(HISTORY)?.let { read(context, it) } ?: return
+        val history = runCatching { json.decodeFromString(SharedHistory.serializer(), text) }.getOrNull() ?: return
+        Store.update(context) { it.copy(days = history.days + it.days.filterKeys { k -> k !in history.days }) }
     }
 
     private fun exportHistory(context: Context, data: AppData) {
@@ -104,12 +132,12 @@ object VaultSync {
      * Apply grove.json if it was edited since Grove last wrote or read it. Runs on a background
      * thread (app resume, boot, the day tick). Returns true if anything changed.
      */
-    fun importIfChanged(context: Context): Boolean {
+    fun importIfChanged(context: Context, force: Boolean = false): Boolean {
         val data = Store.get(context)
         val dir = folder(context, data) ?: return false
         val f = dir.findFile(FILE) ?: run { export(context, data); return false }
         val text = read(context, f) ?: return false
-        if (text.hashCode() == lastHash(context)) return false
+        if (!force && text.hashCode() == lastHash(context)) return false
         val setup = runCatching { json.decodeFromString(SharedSetup.serializer(), text) }
             .onFailure { Log.w(TAG, "grove.json couldn't be read; keeping the app's setup", it) }
             .getOrNull() ?: return false
