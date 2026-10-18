@@ -22,6 +22,8 @@ object Effects {
     fun refreshAll(context: Context) {
         // Pick up setup edits made to Grove/grove.json in the vault (by hand or by Claude).
         runCatching { VaultSync.importIfChanged(context) }
+        // Apply pages and sessions logged through the connector.
+        runCatching { VaultSync.applyInbox(context) }
         Store.refreshDay(context)
         val data = Store.get(context)
         Notifier.showPinned(context, data)

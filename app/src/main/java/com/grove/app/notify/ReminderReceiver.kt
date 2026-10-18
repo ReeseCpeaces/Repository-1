@@ -21,6 +21,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_MINUTES = "minutes"
         const val KIND_HABIT = "habit"
         const val KIND_TASK = "task"
+        const val KIND_GOAL = "goal"
 
         /** Shared by the snooze picker. */
         fun snooze(context: Context, kind: String, id: String, minutes: Int) {
@@ -70,7 +71,20 @@ class ReminderReceiver : BroadcastReceiver() {
         Store.refreshDay(context)
         val data = Store.get(context)
         val snooze = data.settings.defaultSnoozeMinutes
-        if (kind == KIND_HABIT) {
+        if (kind == KIND_GOAL) {
+            val g = data.goals.firstOrNull { it.id == id } ?: return
+            // Snoozed nudges fire on the same day; a plain nudge only if its threshold isn't met yet.
+            val day = Logic.groveToday(data)
+            val target = Logic.target(data, g, day)
+            val done = Logic.progress(data, g, day)
+            if (done >= target) return
+            val text = if (g.kind == com.grove.app.data.GoalKind.PAGES) {
+                val book = Logic.currentBook(data)
+                "$done / $target pages this week" + (book?.let { " · ${it.title.substringBefore(" (")} p. ${Logic.bookPage(data, it)}" } ?: "") +
+                    ". Even a couple of pages counts."
+            } else "${Logic.sessionLabel(done, target)}. Any session counts, however short."
+            Notifier.showNudge(context, id, g.name, text, snooze)
+        } else if (kind == KIND_HABIT) {
             val h = data.habits.firstOrNull { it.id == id } ?: return
             if (Logic.isDoneToday(data, h)) return
             val streak = Logic.streak(data, h)

@@ -67,6 +67,22 @@ object AlarmScheduler {
             }
         }
 
+        // Weekly-goal nudges for the rest of this week, only while still under their threshold.
+        val groveDay = Logic.groveToday(data)
+        for (g in data.goals) {
+            for (n in g.nudges) {
+                val date = Logic.dayInWeek(groveDay, n.weekday)
+                if (date.isBefore(groveDay)) continue
+                if (Logic.progress(data, g, date) >= Logic.target(data, g, date) * n.below) continue
+                val (h, m) = n.time.split(":").map { it.toInt() }
+                val at = date.atTime(h, m)
+                if (!at.isAfter(now)) continue
+                val code = "nudge|${g.id}|$date|${n.time}".hashCode()
+                codes += code
+                setExact(context, at, fireIntent(context, code, ReminderReceiver.KIND_GOAL, g.id))
+            }
+        }
+
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val previous = prefs.getStringSet(KEY_CODES, emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }
         for (code in previous - codes) {

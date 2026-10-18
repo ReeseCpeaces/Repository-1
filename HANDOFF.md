@@ -24,13 +24,24 @@ with an irregular sleep schedule, working through an AODA druid candidate year a
 Novitiate, writing a novel, and keeping up the house. Morning and bedtime practices follow when they
 wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 
-## What's built (Grove 0.1.10 at time of writing)
+## What's built
 
 - **Today screen:** habits (round checks) and tasks (square checks) kept separate, a week strip,
   Wheel of the Year (holy days with countdowns), all tasks list, add/edit for habits and tasks.
 - **Habits:** steps (each can tick an Obsidian property), days of week, reminder times, "keep
   reminding until done" every N minutes, pinned-notification toggle.
 - **Streaks:** one missed day *pauses* a streak, two in a row *reset* it. Total days are tracked too.
+  Only three daily habits keep streaks: Morning practice (h1), Before-bed practice (h2), 15-min house reset (h3).
+- **Weekly goals (no streaks, weeks start Monday):** `Goal` in `Models.kt`, created by `Migrate.kt`
+  from the retired habits h4/h5 (their history still counts).
+  - *Write the book* (`kind = sessions`): 3 a week, at most one per day, shows `1/3 this week` or `4/3 ★`.
+    Nudges Thu 3 PM if 0 sessions, Sat 3 PM if under 3.
+  - *Field guides* (`kind = pages`): pages logged per book (`DayRecord.pages`), Books screen with
+    progress bars. Weekly target = pages left at the start of the week ÷ weeks left until
+    2027-06-21, rounded up (74 from Oct 19, 2026). Ticks `read` in the note on days with pages.
+    Nudges Thu 5:30 PM if under a third of the target, Sat 5:30 PM if under the target.
+- **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
+  Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
   backup cutoff hour (default 2 PM). So Before-bed practice at 3 AM counts for the previous day.
 - **Reminders:** exact alarms, Done / Snooze N min / "Snooze…" picker (5 min–2 h); repeats until done.
@@ -41,7 +52,9 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - **Forest tab:** flat-art scene from Reese's SVG Repo icons (in `art/`). One plant type per habit,
   growing with total days (starts bare). Time of day follows the routine: dark before Morning
   practice, day after it, night after Before-bed practice. The wolf sleeps / sits / howls (head and
-  tail are separate pieces). Dormant plants turn gray when a streak is paused.
+  tail are separate pieces). Dormant plants turn gray when a streak is paused. Writing grows teal trees
+  with total sessions (never gray). Reading grows a seedling with every page, and each finished
+  book adds a permanent piece (Fluent Emoji Flat icons, MIT, in `art/fluent/`).
 - **Obsidian daily note** (`Journal/Daily notes/{yyyy}/{MMMM}/{yyyy-MM-dd}.md` in the main vault):
   Grove ticks 8 frontmatter checkboxes it owns (`Daily Note`, `sphere of protection`,
   `discursive meditation`, `contemplative meditation`, `read`, `fifteen in nature`, `tree`,
@@ -50,10 +63,12 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   path in Settings (Templater date expressions are filled in).
 - **Vault sync:** Grove writes its setup to `Grove/grove.json` and check-ins to `Grove/history.json`
   in the vault (Syncthing carries them to the server). Edits to `grove.json` are applied when the
-  app opens. On a fresh install, picking the vault restores from these files.
+  app opens. On a fresh install, picking the vault restores from these files. The connector logs
+  pages/sessions by dropping files in `Grove/inbox/`; the app applies them, records their ids in
+  `appliedInbox` (history.json) and deletes them.
 - **Connector (`connector/`):** an MCP server that runs on the server and reads/edits those files.
   Tools: `grove_overview`, `grove_history`, `grove_setup`, add/update/remove habit and task, holy
-  days, settings. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
+  days, settings, `grove_log_pages`, `grove_log_session`, `grove_add_book`, `grove_update_book`. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
   ```powershell
   claude mcp add --scope user grove -- ssh reese@10.0.0.118 /home/reese/grove-src/connector/.venv/bin/python /home/reese/grove-src/connector/grove_mcp.py --vault /mnt/bigdrive/Obsidian
   ```
@@ -67,7 +82,8 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 | `notify/` | `AlarmScheduler`, `ReminderReceiver` (alarms, buttons, boot), `Notifier` (channels, pinned + reminder notifications), `SnoozeActivity` |
 | `widget/Widgets.kt` | Glance widgets and their actions |
 | `obsidian/` | `NoteText` (pure note edits, tested), `ObsidianSync` (daily note via SAF), `VaultSync` (grove.json / history.json) |
-| `ui/` | Compose screens: Today, Day, Habit, Edit, Settings, Forest |
+| `data/Migrate.kt` | One-way data upgrades run on every load/change (habits h4/h5 → goals, books, `nextId`) |
+| `ui/` | Compose screens: Today, Day, Habit, Edit, Settings, Forest, Goals/Books (`GoalsScreen.kt`) |
 | `art/`, `tools/svg2vector.py` | Source SVGs and the converter to `res/drawable` (wolf split by hand into `wolf_tail/body/head.xml`) |
 | `connector/` | `grove_core.py` (rules mirrored from `Logic.kt`), `grove_mcp.py`, tests, README |
 | `.github/workflows/android.yml` | Unit tests, build, publish |
@@ -93,7 +109,7 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - "Today" in the app is Grove's day (`Logic.groveToday(data)`, which lags the calendar after midnight), never `LocalDate.now()`.
 - Habits with `role` `"morning"` / `"bedtime"` drive the day rollover and forest time of day.
 - Grove owns those 8 note properties; ticking them by hand in Obsidian gets reverted.
-- If streak or day rules change, change `Logic.kt` and `connector/grove_core.py` together.
+- If streak, day, week or page-target rules change, change `Logic.kt` and `connector/grove_core.py` together.
 
 ## Known gaps / ideas not done yet
 

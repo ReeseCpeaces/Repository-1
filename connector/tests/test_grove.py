@@ -43,8 +43,8 @@ def test_overview_and_history():
 def test_edits_round_trip():
     g = Grove(make_vault())
     h = g.add_habit("Discursive meditation", days=["daily"], reminders=["21:00"], nag_minutes=15)
-    assert h["id"] == "h3" and h["reminders"] == ["21:00"] and h["created"] == "2026-10-15"
-    g.update_habit("h3", days=["weekdays"], reminders=[])
+    assert h["id"] == "h27" and h["reminders"] == ["21:00"] and h["created"] == "2026-10-15"
+    g.update_habit(h["id"], days=["weekdays"], reminders=[])
     saved = g.load_setup()["habits"][2]
     assert saved["days"] == [False, True, True, True, True, True, False] and saved["reminders"] == []
     t = g.add_task("Email GCC", time_due="15:00", date_due="2026-10-30")
@@ -84,6 +84,72 @@ def test_bad_input_is_explained():
             raise AssertionError("expected GroveError")
         except GroveError:
             pass
+
+
+def goal_vault(current_day: str = "2026-10-19") -> Grove:
+    """A vault after the app's migration: writing and field-guide goals, the 9 books (2,587 pages)."""
+    vault = make_vault()
+    setup = json.loads((vault / "Grove/grove.json").read_text())
+    pages = [456, 429, 218, 304, 316, 392, 252, 144, 76]
+    setup["books"] = [{"id": f"b{30 + i}", "title": t, "pages": n, "startPage": 0, "piece": ""}
+                      for i, (t, n) in enumerate(zip(["Trees", "Wildflowers", "Weeds", "Mushrooms", "Birds", "Mammals", "Rocks", "Frogs", "Snakes"], pages))]
+    setup["goals"] = [
+        {"id": "g27", "name": "Write the book", "kind": "sessions", "perWeek": 3, "legacyHabit": "h4", "created": "2026-10-01"},
+        {"id": "g28", "name": "Field guides", "kind": "pages", "deadline": "2027-06-21", "prop": "read", "legacyHabit": "h5", "created": "2026-10-01"},
+    ]
+    setup["nextId"] = 39
+    (vault / "Grove/grove.json").write_text(json.dumps(setup))
+    history = json.loads((vault / "Grove/history.json").read_text())
+    history["currentDay"] = current_day
+    history["days"]["2026-10-14"]["steps"]["h4"] = [0]  # an old writing check-off counts as a session
+    (vault / "Grove/history.json").write_text(json.dumps(history))
+    return Grove(vault)
+
+
+def test_weekly_page_target_matches_app():
+    from datetime import date
+    g = goal_vault()
+    setup, history = g.load_setup(), g.load_history()
+    goal = setup["goals"][1]
+    assert sum(b["pages"] for b in setup["books"]) == 2587
+    assert g.weekly_page_target(setup, history, goal, date(2026, 10, 19)) == 74  # 2587 / 35 weeks, rounded up
+    assert g.weekly_page_target(setup, history, goal, date(2026, 10, 25)) == 74  # same all week (Sunday)
+
+
+def test_logging_pages_and_sessions_through_the_inbox():
+    from datetime import date
+    g = goal_vault()
+    assert "18 / 74 pages" in g.log_pages("Mushrooms", 18)
+    assert "Mushrooms: 18/304" in g.overview()
+    assert "1/3 this week" in g.log_session()
+    assert "already" in g.log_session()  # once per day
+    assert len(list(g.inbox.glob("*.json"))) == 2
+    eff = g.effective_history()
+    goal = g.load_setup()["goals"][0]
+    assert g.total_sessions(eff, goal) == 2  # today's session plus the old h4 check-off
+    assert g.sessions_this_week(eff, goal, date(2026, 10, 19)) == 1
+    # Once the app applies an inbox file it is listed in appliedInbox and no longer counted twice.
+    history = g.load_history()
+    history["appliedInbox"] = [json.loads(f.read_text())["id"] for f in g.inbox.glob("*.json")]
+    (g.setup_path.parent / "history.json").write_text(json.dumps(history))
+    assert g.pending_inbox(history) == []
+
+
+def test_books_can_be_added_and_edited():
+    g = goal_vault()
+    b = g.set_book("Michigan Lichens", 200, 10)
+    assert b["id"] == "b39" and g.load_setup()["nextId"] == 40
+    g.set_book(pages=210, book_id=b["id"])
+    assert g.load_setup()["books"][-1]["pages"] == 210 and g.load_setup()["books"][-1]["startPage"] == 10
+
+
+def test_ids_are_never_reused():
+    g = Grove(make_vault())
+    t = g.add_task("A", days=["Mon"])
+    assert t["id"] == "t27"  # t15-t26 were used before the counter existed
+    g.remove("task", t["id"])
+    assert g.add_task("B", days=["Mon"])["id"] == "t28"
+    assert g.add_habit("C")["id"] == "h29"
 
 
 if __name__ == "__main__":

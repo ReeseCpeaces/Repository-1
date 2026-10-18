@@ -30,7 +30,8 @@ object Store {
         val data = if (f.exists()) {
             runCatching { json.decodeFromString(AppData.serializer(), f.readText()) }.getOrNull()
         } else null
-        return data ?: Seed.data(LocalDate.now()).also { save(context, it) }
+        val loaded = data ?: Seed.data(LocalDate.now())
+        return Migrate.run(loaded).also { if (it != data) save(context, it) }
     }
 
     private fun save(context: Context, data: AppData) {
@@ -46,7 +47,7 @@ object Store {
         val (old, new) = synchronized(lock) {
             val s = state(app) as MutableStateFlow<AppData>
             val before = s.value
-            val after = change(rolled(before, LocalDateTime.now()))
+            val after = Migrate.run(change(rolled(before, LocalDateTime.now())))
             if (after != before) {
                 save(app, after)
                 s.value = after

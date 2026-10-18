@@ -6,9 +6,11 @@ the phone shows. Plain Python, no MCP here, so it can be tested on its own.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -25,6 +27,7 @@ class Grove:
         self.dir = Path(vault).expanduser() / "Grove"
         self.setup_path = self.dir / "grove.json"
         self.history_path = self.dir / "history.json"
+        self.inbox = self.dir / "inbox"
 
     # ----- files -----
 
@@ -104,10 +107,156 @@ class Grove:
                 out.append({"id": "pre-" + h["id"], "name": f"{h['name']} in 3 days: prepare", "time": "14:00", "list": "Holy day"})
         return sorted(out, key=lambda t: t["time"])
 
+    # ----- weekly goals and books (same rules as Logic.kt; weeks start Monday) -----
+
+    def pending_inbox(self, history: dict) -> list[dict]:
+        """Logs written here that the app hasn't applied yet."""
+        applied = set(history.get("appliedInbox", []))
+        out = []
+        if self.inbox.exists():
+            for f in sorted(self.inbox.glob("*.json")):
+                try:
+                    e = json.loads(f.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if e.get("id") not in applied:
+                    out.append(e)
+        return out
+
+    def effective_history(self) -> dict:
+        """history.json plus pending inbox logs, so progress shows right away."""
+        history = self.load_history()
+        days = {k: {**v, "pages": dict(v.get("pages", {})), "sessions": list(v.get("sessions", []))} for k, v in history.get("days", {}).items()}
+        for e in self.pending_inbox(history):
+            rec = days.setdefault(e.get("day") or history["currentDay"], {"steps": {}, "tasks": {}, "pages": {}, "sessions": []})
+            rec.setdefault("pages", {})
+            rec.setdefault("sessions", [])
+            if e.get("type") == "pages":
+                rec["pages"][e["book"]] = max(0, rec["pages"].get(e["book"], 0) + e.get("pages", 0))
+            elif e.get("type") == "session" and e.get("goal") not in rec["sessions"]:
+                rec["sessions"].append(e["goal"])
+        return {**history, "days": days}
+
+    @staticmethod
+    def week_start(d: date) -> date:
+        return d - timedelta(days=d.weekday())
+
+    @staticmethod
+    def session_logged(history: dict, day: str, g: dict) -> bool:
+        rec = history.get("days", {}).get(day)
+        if not rec:
+            return False
+        return g["id"] in rec.get("sessions", []) or bool(g.get("legacyHabit") and rec.get("steps", {}).get(g["legacyHabit"]))
+
+    def sessions_this_week(self, history: dict, g: dict, ref: date) -> int:
+        ws = self.week_start(ref)
+        return sum(1 for i in range(7) if (d := ws + timedelta(days=i)) <= ref and self.session_logged(history, d.isoformat(), g))
+
+    def total_sessions(self, history: dict, g: dict) -> int:
+        return sum(1 for day in history.get("days", {}) if self.session_logged(history, day, g))
+
+    @staticmethod
+    def pages_logged(history: dict, book_id: str, before: date | None = None) -> int:
+        return sum(rec.get("pages", {}).get(book_id, 0) for day, rec in history.get("days", {}).items()
+                   if before is None or date.fromisoformat(day) < before)
+
+    def book_page(self, history: dict, b: dict, before: date | None = None) -> int:
+        return max(0, min(b["pages"], b.get("startPage", 0) + self.pages_logged(history, b["id"], before)))
+
+    def pages_this_week(self, history: dict, ref: date) -> int:
+        ws = self.week_start(ref)
+        return sum(sum(rec.get("pages", {}).values()) for day, rec in history.get("days", {}).items() if ws <= date.fromisoformat(day) <= ref)
+
+    def weekly_page_target(self, setup: dict, history: dict, g: dict, ref: date) -> int:
+        ws = self.week_start(ref)
+        left = sum(b["pages"] - self.book_page(history, b, before=ws) for b in setup.get("books", []))
+        weeks = max(1, math.ceil((date.fromisoformat(g["deadline"]) - ws).days / 7)) if g.get("deadline") else 1
+        return max(0, math.ceil(left / weeks))
+
+    def progress(self, setup: dict, history: dict, g: dict, ref: date) -> tuple[int, int]:
+        if g["kind"] == "pages":
+            return self.pages_this_week(history, ref), self.weekly_page_target(setup, history, g, ref)
+        return self.sessions_this_week(history, g, ref), g.get("perWeek", 3)
+
+    def current_book(self, setup: dict, history: dict, last: str | None = None) -> dict | None:
+        if last is None:  # the book read most recently, like the app's lastBook
+            last = next((bid for _, rec in sorted(history.get("days", {}).items(), reverse=True)
+                         for bid, n in rec.get("pages", {}).items() if n > 0), None)
+        open_books = [b for b in setup.get("books", []) if self.book_page(history, b) < b["pages"]]
+        return next((b for b in open_books if b["id"] == last), open_books[0] if open_books else None)
+
+    def find_book(self, setup: dict, book: str) -> dict:
+        books = setup.get("books", [])
+        for b in books:
+            if b["id"] == book:
+                return b
+        matches = [b for b in books if book.lower() in b["title"].lower()]
+        if len(matches) == 1:
+            return matches[0]
+        names = ", ".join(f"{b['id']} {b['title']}" for b in books)
+        raise GroveError(f"Couldn't tell which book {book!r} means. Use an id: {names}")
+
+    def _write_inbox(self, entry: dict) -> None:
+        self.inbox.mkdir(exist_ok=True)
+        tmp = self.inbox / f".{entry['id']}.tmp"
+        tmp.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        os.replace(tmp, self.inbox / f"{entry['id']}.json")
+
+    def log_pages(self, book: str, pages: int, day: str | None = None) -> str:
+        setup, history = self.load_setup(), self.load_history()
+        b = self.find_book(setup, book)
+        if pages == 0:
+            raise GroveError("pages must not be 0.")
+        day = self.check_date(day) or history["currentDay"]
+        self._write_inbox({"id": uuid.uuid4().hex, "type": "pages", "day": day, "book": b["id"], "pages": pages})
+        eff = self.effective_history()
+        goal = next((g for g in setup.get("goals", []) if g["kind"] == "pages"), None)
+        msg = f"Logged {pages} pages of {b['title']} on {day}: now p. {self.book_page(eff, b)} of {b['pages']}."
+        if goal:
+            done, target = self.progress(setup, eff, goal, date.fromisoformat(eff["currentDay"]))
+            msg += f" This week: {done} / {target} pages."
+        return msg + " It reaches the phone when Syncthing syncs and Grove opens."
+
+    def log_session(self, goal: str | None = None, day: str | None = None) -> str:
+        setup, history = self.load_setup(), self.load_history()
+        goals = [g for g in setup.get("goals", []) if g["kind"] == "sessions"]
+        g = next((x for x in goals if goal in (None, x["id"]) or (goal and goal.lower() in x["name"].lower())), None)
+        if g is None:
+            raise GroveError("No session goal found. Use grove_overview to see goal ids.")
+        day = self.check_date(day) or history["currentDay"]
+        eff = self.effective_history()
+        if self.session_logged(eff, day, g):
+            return f"{g['name']} already has a session on {day} (one per day)."
+        self._write_inbox({"id": uuid.uuid4().hex, "type": "session", "day": day, "goal": g["id"]})
+        eff = self.effective_history()
+        done, target = self.progress(setup, eff, g, date.fromisoformat(eff["currentDay"]))
+        return f"Logged a {g['name']} session on {day}: {done}/{target} this week."
+
+    def set_book(self, title: str | None = None, pages: int | None = None, start_page: int | None = None, book_id: str | None = None) -> dict:
+        setup = self.load_setup()
+        setup.setdefault("books", [])
+        if book_id:
+            b = self.find_book(setup, book_id)
+        else:
+            if not title or not pages:
+                raise GroveError("A new book needs a title and pages.")
+            b = {"id": self.new_id("b", setup), "title": title, "pages": 0, "startPage": 0, "piece": ""}
+            setup["books"].append(b)
+        if title:
+            b["title"] = title
+        if pages is not None:
+            if pages <= 0:
+                raise GroveError("pages must be more than 0.")
+            b["pages"] = pages
+        if start_page is not None:
+            b["startPage"] = max(0, min(start_page, b["pages"]))
+        self.save_setup(setup)
+        return b
+
     # ----- reports -----
 
     def overview(self) -> str:
-        setup, history = self.load_setup(), self.load_history()
+        setup, history = self.load_setup(), self.effective_history()
         day = history["currentDay"]
         d = date.fromisoformat(day)
         rec = history.get("days", {}).get(day, {})
@@ -120,6 +269,25 @@ class Grove:
             when = ", ".join(h.get("reminders", [])) or h.get("whenText", "")
             lines.append(f"- [{'x' if done else ' '}] {h['name']} (id {h['id']}): {n}/{len(h['steps'])} steps, "
                          f"streak {self.streak(history, h)}, total {self.total_days(history, h)} days, when: {when}")
+        goals = setup.get("goals", [])
+        if goals:
+            lines += ["", "Weekly goals (weeks start Monday, no streaks):"]
+            for g in goals:
+                done, target = self.progress(setup, history, g, d)
+                if g["kind"] == "pages":
+                    b = self.current_book(setup, history)
+                    where = f"; current book {b['title']} p. {self.book_page(history, b)} of {b['pages']}" if b else ""
+                    lines.append(f"- {g['name']} (id {g['id']}): {done} / {target} pages this week, "
+                                 f"{sum(bk['pages'] - self.book_page(history, bk) for bk in setup.get('books', []))} pages left, deadline {g.get('deadline')}{where}")
+                else:
+                    lines.append(f"- {g['name']} (id {g['id']}): {done}/{g.get('perWeek', 3)} sessions this week"
+                                 f"{' (logged today)' if self.session_logged(history, day, g) else ''}, {self.total_sessions(history, g)} total")
+        books = setup.get("books", [])
+        if books:
+            lines += ["", "Books:"]
+            for b in books:
+                page = self.book_page(history, b)
+                lines.append(f"- {b['id']} {b['title']}: {page}/{b['pages']}" + (" (finished)" if page >= b["pages"] else ""))
         lines += ["", "Tasks today:"]
         tasks = self.tasks_on(setup, d)
         if not tasks:
@@ -133,7 +301,7 @@ class Grove:
         return "\n".join(lines)
 
     def history_report(self, days: int = 14) -> str:
-        setup, history = self.load_setup(), self.load_history()
+        setup, history = self.load_setup(), self.effective_history()
         end = date.fromisoformat(history["currentDay"])
         lines = []
         for i in range(days - 1, -1, -1):
@@ -145,8 +313,12 @@ class Grove:
             names = {t["id"]: t["name"] for t in setup.get("tasks", [])}
             tasks = [names.get(t, t) for t in rec.get("tasks", {})]
             missed = [n for n in habits if n not in done]
+            sessions = [g["name"] for g in setup.get("goals", []) if g["kind"] == "sessions" and self.session_logged(history, key, g)]
+            pages = sum(rec.get("pages", {}).values())
             lines.append(f"{d.strftime('%a %b')} {d.day}: habits {len(done)}/{len(habits)}"
                          + (f"; missed: {', '.join(missed)}" if missed else "")
+                         + (f"; sessions: {', '.join(sessions)}" if sessions else "")
+                         + (f"; {pages} pages read" if pages else "")
                          + (f"; tasks done: {', '.join(tasks)}" if tasks else ""))
         return "\n".join(lines)
 
@@ -191,12 +363,19 @@ class Grove:
         except ValueError:
             raise GroveError(f"Dates must be YYYY-MM-DD. Got {d!r}.") from None
 
-    @staticmethod
-    def new_id(prefix: str, existing: list[dict]) -> str:
-        used = {x["id"] for x in existing}
-        n = len(existing) + 1
-        while f"{prefix}{n}" in used:
-            n += 1
+    MIN_NEXT_ID = 27  # t15-t26 were handed out and removed before the counter existed
+
+    def highest_id_number(self, setup: dict, history: dict) -> int:
+        ids = [x["id"] for key in ("habits", "tasks", "goals", "books") for x in setup.get(key, [])]
+        for rec in history.get("days", {}).values():
+            ids += list(rec.get("steps", {})) + list(rec.get("tasks", {})) + rec.get("sessions", []) + list(rec.get("pages", {}))
+        nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(r"[a-z](\d{1,7})", i))]
+        return max(nums, default=0)
+
+    def new_id(self, prefix: str, setup: dict) -> str:
+        """Same counter as the app (nextId in grove.json): ids are never handed out twice."""
+        n = max(setup.get("nextId", 0), self.highest_id_number(setup, self.load_history()) + 1, self.MIN_NEXT_ID)
+        setup["nextId"] = n + 1
         return f"{prefix}{n}"
 
     @staticmethod
@@ -218,7 +397,7 @@ class Grove:
                   nag: bool = True, nag_minutes: int = 15, when_text: str = "", pinned: bool = True) -> dict:
         setup = self.load_setup()
         h = {
-            "id": self.new_id("h", setup["habits"]), "name": name.strip(), "whenText": when_text or "Any time today",
+            "id": self.new_id("h", setup), "name": name.strip(), "whenText": when_text or "Any time today",
             "days": self.parse_days(days, [True] * 7), "steps": self.steps_from(steps, name) or [{"label": name.strip(), "prop": ""}],
             "reminders": self.check_times(reminders) or [], "nag": nag, "nagMinutes": nag_minutes, "pinned": pinned,
             "role": "", "created": self.load_history()["currentDay"],
@@ -272,7 +451,7 @@ class Grove:
         if not md and not any(flags) and not date_due:
             raise GroveError("A one-time task needs date_due (YYYY-MM-DD); a weekly task needs days; a monthly task needs month_day.")
         t = {
-            "id": self.new_id("t", setup["tasks"]), "name": name.strip(), "list": list_name, "days": flags,
+            "id": self.new_id("t", setup), "name": name.strip(), "list": list_name, "days": flags,
             "date": "" if (md or any(flags)) else self.check_date(date_due), "time": self.check_times([time_due])[0],
             "firstOfMonth": first_of_month and any(flags), "prop": prop, "high": high,
             "reminders": self.check_times(reminders) if reminders is not None else [time_due], "nag": nag, "nagMinutes": nag_minutes,

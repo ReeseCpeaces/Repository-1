@@ -25,6 +25,7 @@ sealed interface Screen {
     data object Today : Screen
     data object Forest : Screen
     data object Settings : Screen
+    data object Books : Screen
     data class HabitDetail(val id: String) : Screen
     data class EditHabit(val id: String?) : Screen
     data class EditTask(val id: String?, val date: String? = null, val time: String? = null) : Screen
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
             Screen.Today -> TodayScreen(data, ::go, ::tab)
             Screen.Forest -> ForestScreen(data, ::go, ::tab)
             Screen.Settings -> SettingsScreen(data, ::back)
+            Screen.Books -> BooksScreen(data, ::back)
             is Screen.HabitDetail -> HabitScreen(data, s.id, ::go, ::back)
             is Screen.EditHabit -> EditHabitScreen(data, s.id, ::back)
             is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back)

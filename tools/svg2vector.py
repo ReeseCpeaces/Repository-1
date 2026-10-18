@@ -75,7 +75,7 @@ def walk(el, out, fill, eo, recolor, indent):
             out.append('%s</group>' % indent)
         else:
             d = shape_path(child)
-            if d is None:
+            if d is None or (f or '').lower() == 'none':
                 continue
             c = recolor.get((f or '#000000').upper(), f or '#000000')
             out.append('%s<path android:fillColor="%s"%s android:pathData="%s"/>' % (

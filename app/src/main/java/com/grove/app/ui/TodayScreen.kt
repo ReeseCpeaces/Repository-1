@@ -88,6 +88,10 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                     }
                 }
             }
+            if (data.goals.isNotEmpty()) {
+                item { Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Weekly goals · any day counts", GroveColors.Green) } }
+                item { Column { GoalCards(data, go) } }
+            }
             item { Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Tasks today", GroveColors.Amber) } }
             if (tasks.isEmpty()) item { Text("Nothing scheduled.", Modifier.padding(horizontal = 16.dp), color = GroveColors.Muted) }
             items(tasks, key = { "t" + it.id }) { t ->

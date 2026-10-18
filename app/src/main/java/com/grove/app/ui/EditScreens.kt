@@ -63,7 +63,6 @@ private fun pickTime(context: Context, initial: String, onPick: (String) -> Unit
     TimePickerDialog(context, { _, hh, mm -> onPick("%02d:%02d".format(hh, mm)) }, h, m, false).show()
 }
 
-private fun newId(prefix: String) = prefix + System.currentTimeMillis().toString(36)
 
 @Composable
 fun EditHabitScreen(data: AppData, id: String?, back: () -> Unit) {
@@ -81,11 +80,14 @@ fun EditHabitScreen(data: AppData, id: String?, back: () -> Unit) {
     fun save() {
         if (name.isBlank()) return
         val clean = steps.map { Step(it.label.trim(), it.prop.trim()) }.filter { it.label.isNotEmpty() }.ifEmpty { listOf(Step(name.trim())) }
-        val h = (old ?: Habit(newId("h"), name, steps = clean, created = data.currentDay)).copy(
+        val h = (old ?: Habit("", name, steps = clean, created = data.currentDay)).copy(
             name = name.trim(), whenText = whenText.trim(), steps = clean, days = days.toList(),
             reminders = reminders.sorted(), nag = nag, nagMinutes = nagMinutes, pinned = pinned,
         )
-        Store.update(context) { d -> d.copy(habits = if (old == null) d.habits + h else d.habits.map { if (it.id == h.id) h else it }) }
+        Store.update(context) { d ->
+            if (old == null) Logic.allocateId(d, "h").let { (id, n) -> n.copy(habits = n.habits + h.copy(id = id)) }
+            else d.copy(habits = d.habits.map { if (it.id == h.id) h else it })
+        }
         back()
     }
 
@@ -135,13 +137,16 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
         if (name.isBlank()) return
         val weekly = repeat == "weekly" && days.any { it }
         val md = if (repeat == "monthly") monthDay.toIntOrNull()?.coerceIn(1, 31) ?: return else 0
-        val t = (old ?: Task(newId("t"), name)).copy(
+        val t = (old ?: Task("", name)).copy(
             name = name.trim(), list = list.trim().ifEmpty { "Inbox" },
             days = if (weekly) days.toList() else List(7) { false }, date = if (repeat == "once" || (repeat == "weekly" && !weekly)) date else "",
             monthDay = md, time = time, firstOfMonth = firstOfMonth && weekly, prop = prop.trim(), high = high,
             reminders = reminders.sorted(), nag = nag, nagMinutes = nagMinutes,
         )
-        Store.update(context) { d -> d.copy(tasks = if (old == null) d.tasks + t else d.tasks.map { if (it.id == t.id) t else it }) }
+        Store.update(context) { d ->
+            if (old == null) Logic.allocateId(d, "t").let { (id, n) -> n.copy(tasks = n.tasks + t.copy(id = id)) }
+            else d.copy(tasks = d.tasks.map { if (it.id == t.id) t else it })
+        }
         back()
     }
 

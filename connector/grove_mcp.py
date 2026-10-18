@@ -19,7 +19,10 @@ from grove_core import Grove, GroveError
 
 INSTRUCTIONS = """Grove is the user's habit and task app on their Android phone.
 Habits have steps, optional reminder times, and streaks with one grace day (one missed day pauses
-a streak, two in a row reset it). Tasks repeat on weekdays or happen once on a date. Changes made
+a streak, two in a row reset it). Weekly goals have no streak: "Write the book" counts sessions
+(one per day, target 3 a week) and "Field guides" counts pages read across the books, with a weekly
+target of pages left / weeks left until the deadline (weeks start Monday). Log them with
+grove_log_session and grove_log_pages. Tasks repeat on weekdays or monthly, or happen once on a date. Changes made
 here reach the phone through Syncthing and apply when the Grove app next opens, so mention that
 after editing. Times are 24-hour HH:MM. Call grove_overview first to see ids and today's state."""
 
@@ -37,7 +40,7 @@ def _run(fn, *args, **kwargs) -> str:
 
 @mcp.tool()
 def grove_overview() -> str:
-    """Today in Grove: each habit (done, steps, streak, total days, reminders), today's tasks, upcoming holy days, with ids."""
+    """Today in Grove: each habit (done, steps, streak, total days, reminders), weekly goals and book progress, today's tasks, upcoming holy days, with ids."""
     return _run(grove.overview)
 
 
@@ -110,6 +113,31 @@ def grove_update_task(task_id: str, name: str | None = None, time_due: str | Non
 def grove_remove_task(task_id: str) -> str:
     """Delete a task."""
     return _run(grove.remove, "task", task_id)
+
+
+@mcp.tool()
+def grove_log_pages(book: str, pages: int, day: str | None = None) -> str:
+    """Log field-guide pages read. book: a book id (e.g. "b30") or a unique part of its title (e.g. "Mushrooms").
+    pages: pages read (negative to correct a mistake). day: YYYY-MM-DD, default today's Grove day."""
+    return _run(grove.log_pages, book, pages, day)
+
+
+@mcp.tool()
+def grove_log_session(goal: str | None = None, day: str | None = None) -> str:
+    """Log one session for a weekly session goal (default: the writing goal). One per day. day: YYYY-MM-DD, default today."""
+    return _run(grove.log_session, goal, day)
+
+
+@mcp.tool()
+def grove_add_book(title: str, pages: int, start_page: int = 0) -> str:
+    """Add a book to the reading goal. start_page: pages already read before tracking began."""
+    return _run(grove.set_book, title, pages, start_page)
+
+
+@mcp.tool()
+def grove_update_book(book_id: str, title: str | None = None, pages: int | None = None, start_page: int | None = None) -> str:
+    """Change a book's title, page count or starting page. Only the fields given are changed."""
+    return _run(grove.set_book, title, pages, start_page, book_id)
 
 
 @mcp.tool()

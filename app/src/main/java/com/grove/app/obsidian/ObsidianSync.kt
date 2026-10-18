@@ -21,7 +21,7 @@ object ObsidianSync {
 
     fun syncAsync(context: Context, old: AppData?, new: AppData) {
         if (new.settings.vaultUri.isEmpty()) return
-        if (old != null && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits && old.tasks == new.tasks) return
+        if (old != null && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits && old.tasks == new.tasks && old.goals == new.goals && old.books == new.books) return
         worker.execute { runCatching { sync(context, new) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
     }
 
@@ -37,6 +37,11 @@ object ObsidianSync {
             h.steps.forEachIndexed { i, s -> if (s.prop.isNotBlank()) props[s.prop] = (props[s.prop] ?: false) || i in done }
         }
         for (t in data.tasks) if (t.prop.isNotBlank()) props[t.prop] = (props[t.prop] ?: false) || t.id in rec.tasks
+        for (g in data.goals) {
+            if (g.prop.isBlank()) continue
+            val did = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day) > 0 else Logic.sessionLogged(data, day, g)
+            props[g.prop] = (props[g.prop] ?: false) || did
+        }
         props["lifestyle changes"] = rec.lifestyle
         return props
     }
@@ -57,6 +62,12 @@ object ObsidianSync {
         for (t in Logic.tasksOn(data, d)) {
             val at = data.today.tasks[t.id]
             lines += "- [${if (at != null) "x" else " "}] ${t.name}${at?.let { " · $it" }.orEmpty()}"
+        }
+        for (g in data.goals) {
+            val today = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, data.currentDay).let { if (it > 0) " (+$it pages today)" else "" }
+            else if (Logic.sessionLogged(data, data.currentDay, g)) " (session today)" else ""
+            val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else ""
+            lines += "${g.name}: ${Logic.progress(data, g)} / ${Logic.target(data, g)}$unit this week$today"
         }
         lines += "Streaks: " + data.habits.joinToString(" · ") { "${it.name} ${Logic.streak(data, it)}" }
         Logic.upcomingHolyDays(data, d).firstOrNull()?.let { (h, n) -> lines += "Next holy day: ${h.name} ${Logic.countdown(n)}" }

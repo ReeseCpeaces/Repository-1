@@ -1,7 +1,8 @@
 # Grove connector
 
-Lets Claude see your Grove habits, streaks and check-ins, and change your setup (habits, tasks,
-reminders, holy days, settings), the way the TickTick connector does.
+Lets Claude see your Grove habits, streaks, weekly goals and book progress, change your setup
+(habits, tasks, reminders, holy days, books, settings), and log writing sessions and pages read,
+the way the TickTick connector does.
 
 ## How it fits together
 
@@ -13,6 +14,8 @@ Phone (Grove app)  <-- Syncthing -->  Server: vault/Grove/grove.json + history.j
   Obsidian vault. Syncthing copies them to the server.
 - This connector runs on the server, reads those files, and edits `grove.json` when Claude asks.
 - Syncthing copies the edit back to the phone; Grove applies it the next time the app opens.
+- Logged pages and writing sessions go into `Grove/inbox/` as small files. The app applies each one
+  once and deletes it. Until then the connector already counts them in its answers.
 
 Nothing is sent anywhere else. In the setup below the connector is only reachable from your own
 computer or home network.
@@ -131,7 +134,7 @@ This has no login, so **don't** forward port 8765 on your router. It's for your 
 ## Try it
 
 Ask Claude: "What does my Grove look like today?" or "Add a Grove habit for discursive meditation
-at 9 PM." After an edit, open Grove on the phone once Syncthing has synced.
+at 9 PM." or "I read 12 pages of the mushroom guide." After an edit, open Grove on the phone once Syncthing has synced.
 
 ## Why not a claude.ai connector like TickTick?
 

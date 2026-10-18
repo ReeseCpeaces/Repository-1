@@ -58,6 +58,39 @@ data class Task(
     val repeating: Boolean get() = monthDay > 0 || days.any { it }
 }
 
+/** A weekly-goal nudge: on [weekday] (Sunday-first, 0–6) at [time], if progress is under [below] × the week's target. */
+@Serializable
+data class Nudge(val weekday: Int, val time: String, val below: Double)
+
+object GoalKind {
+    /** Count sessions (at most one per day) toward [Goal.perWeek]. */
+    const val SESSIONS = "sessions"
+
+    /** Count pages across [AppData.books] toward a weekly target that finishes them by [Goal.deadline]. */
+    const val PAGES = "pages"
+}
+
+/** A weekly goal: any day counts, no streak, a fresh count every Monday. */
+@Serializable
+data class Goal(
+    val id: String,
+    val name: String,
+    val kind: String,
+    val perWeek: Int = 3,
+    /** For page goals: finish every book by this date ("yyyy-MM-dd"). */
+    val deadline: String = "",
+    /** Obsidian property ticked on days with progress. */
+    val prop: String = "",
+    val nudges: List<Nudge> = emptyList(),
+    /** Habit this goal replaced; its old check-offs count as past sessions. */
+    val legacyHabit: String = "",
+    val created: String,
+)
+
+/** A book for a page goal. [piece] names the forest piece it adds when finished. */
+@Serializable
+data class Book(val id: String, val title: String, val pages: Int, val startPage: Int = 0, val piece: String = "")
+
 @Serializable
 data class HolyDay(val id: String, val name: String, val date: String, val detail: String)
 
@@ -86,6 +119,10 @@ data class DayRecord(
     val habitTimes: Map<String, String> = emptyMap(),
     val lifestyle: Boolean = false,
     val summaryWritten: Boolean = false,
+    /** Ids of session goals logged this day (at most once per day each). */
+    val sessions: List<String> = emptyList(),
+    /** Book id -> pages read this day. */
+    val pages: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
@@ -97,6 +134,14 @@ data class AppData(
     /** The logical day currently being tracked, "yyyy-MM-dd". */
     val currentDay: String = "",
     val days: Map<String, DayRecord> = emptyMap(),
+    val goals: List<Goal> = emptyList(),
+    val books: List<Book> = emptyList(),
+    /** Next number for new ids. Ids are never handed out twice, even after deletes. */
+    val nextId: Int = 0,
+    /** Book picked last time pages were logged. */
+    val lastBook: String = "",
+    /** Ids of Grove/inbox entries (logs from the connector) already applied. */
+    val appliedInbox: List<String> = emptyList(),
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

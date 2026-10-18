@@ -66,6 +66,10 @@ object Notifier {
             val mark = if (Logic.isDoneToday(data, h)) "✓" else "○"
             style.addLine("$mark  ${h.name}  ·  ${Logic.streak(data, h)}d")
         }
+        data.goals.forEach { g ->
+            val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else ""
+            style.addLine("☆  ${g.name}  ·  ${Logic.progress(data, g)}/${Logic.target(data, g)}$unit this week")
+        }
         val b = NotificationCompat.Builder(context, CHANNEL_PINNED)
             .setSmallIcon(R.drawable.ic_stat_grove)
             .setContentTitle(title)
@@ -113,6 +117,28 @@ object Notifier {
                 extras(this); putExtra(ReminderReceiver.EXTRA_MINUTES, defaultSnooze)
             })
             .addAction(0, "Snooze…", PendingIntent.getActivity(context, nid + 3, snoozePicker, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .build()
+        NotificationManagerCompat.from(context).notify(nid, n)
+    }
+
+    /** A gentle weekly-goal nudge: no repeats; "Log it" opens the app, or snooze it. */
+    fun showNudge(context: Context, goalId: String, title: String, text: String, defaultSnooze: Int) {
+        if (!allowed(context)) return
+        val kind = ReminderReceiver.KIND_GOAL
+        val nid = reminderId(kind, goalId)
+        val n = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_stat_grove)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, nid))
+            .addAction(0, "Log it", openApp(context, nid + 1))
+            .addAction(0, "Snooze $defaultSnooze min", receiver(context, nid + 2, ReminderReceiver.ACTION_SNOOZE) {
+                putExtra(ReminderReceiver.EXTRA_KIND, kind); putExtra(ReminderReceiver.EXTRA_ID, goalId)
+                putExtra(ReminderReceiver.EXTRA_MINUTES, defaultSnooze)
+            })
             .build()
         NotificationManagerCompat.from(context).notify(nid, n)
     }

@@ -252,6 +252,19 @@ class TodayWidget : GlanceAppWidget() {
                         Text("${Logic.streak(data, h)}d", style = style(GREEN, 10, bold = true))
                     }
                 }
+                // Weekly goals: progress only; logging happens in the app.
+                items(data.goals.size) { i ->
+                    val g = data.goals[i]
+                    val done = Logic.progress(data, g)
+                    val target = Logic.target(data, g)
+                    val label = if (g.kind == com.grove.app.data.GoalKind.PAGES) "$done/$target p" else if (done > target) "$done/$target ★" else "$done/$target"
+                    Row(GlanceModifier.fillMaxWidth().padding(vertical = 2.dp).clickable(actionStartActivity<MainActivity>()),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("☆", GlanceModifier.width(26.dp), style(GREEN, 15, center = true))
+                        Text(g.name, GlanceModifier.defaultWeight(), style(TEXT, 13), maxLines = 1)
+                        Text(label, style = style(GREEN, 10, bold = true))
+                    }
+                }
                 item { Spacer(GlanceModifier.height(6.dp)) }
             }
             item { Text("TASKS", style = style(AMBER, 10, bold = true)) }

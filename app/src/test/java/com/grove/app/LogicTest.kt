@@ -3,7 +3,9 @@ package com.grove.app
 import com.grove.app.data.AppData
 import com.grove.app.data.DayRecord
 import com.grove.app.data.Habit
+import com.grove.app.data.GoalKind
 import com.grove.app.data.Logic
+import com.grove.app.data.Migrate
 import com.grove.app.data.Role
 import com.grove.app.data.Seed
 import com.grove.app.data.Step
@@ -119,5 +121,56 @@ class LogicTest {
         assertEquals(listOf("Pay rent"), Logic.tasksOn(d, LocalDate.of(2027, 2, 28)).map { it.name })
         assertEquals(listOf("Pay rent"), Logic.tasksOn(d, LocalDate.of(2026, 12, 31)).map { it.name })
         assertTrue(Logic.tasksOn(d, LocalDate.of(2026, 12, 30)).isEmpty())
+    }
+
+    // ----- weekly goals -----
+
+    private fun migrated() = Migrate.run(Seed.data(LocalDate.parse("2026-10-19")))
+
+    @Test fun writingAndReadingBecomeWeeklyGoals() {
+        val d = migrated()
+        assertEquals(listOf("h1", "h2", "h3"), d.habits.map { it.id })
+        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES), d.goals.map { it.kind })
+        assertEquals(9, d.books.size)
+        assertEquals(2587, d.books.sumOf { it.pages })
+        assertTrue(d.goals.none { it.id == "h4" || it.id == "h5" })
+        assertEquals(d, Migrate.run(d)) // safe to run again
+    }
+
+    @Test fun weeklyPageTargetIs74FromOct19AndHoldsAllWeek() {
+        val d = migrated()
+        val reading = d.goals.first { it.kind == GoalKind.PAGES }
+        assertEquals(74, Logic.weeklyPageTarget(d, reading, LocalDate.parse("2026-10-19")))
+        val book = d.books.first { it.title.startsWith("Mushrooms") }
+        val read = Logic.logPages(d, book.id, 18)
+        assertEquals(74, Logic.weeklyPageTarget(read, reading, LocalDate.parse("2026-10-25")))
+        assertEquals(18, Logic.progress(read, reading, LocalDate.parse("2026-10-19")))
+        assertEquals(book.id, Logic.currentBook(read)?.id)
+    }
+
+    @Test fun writingSessionsCountByMondayWeekAndOldCheckOffsCount() {
+        var d = migrated()
+        val writing = d.goals.first { it.kind == GoalKind.SESSIONS }
+        d = d.copy(days = d.days + ("2026-10-14" to DayRecord(steps = mapOf("h4" to listOf(0)))))
+        d = Logic.toggleSession(d, writing.id)
+        assertEquals(1, Logic.sessionsThisWeek(d, writing))
+        assertEquals(2, Logic.totalSessions(d, writing))
+        assertEquals("1/3 this week", Logic.sessionLabel(1, 3))
+        assertEquals("4/3 ★", Logic.sessionLabel(4, 3))
+        // Thursday nudge fires with no sessions yet; Saturday nudge goes quiet at 3.
+        val fresh = migrated()
+        assertTrue(Logic.dueNudge(fresh, writing, LocalDate.parse("2026-10-22")) != null)
+        assertEquals(null, Logic.dueNudge(fresh, writing, LocalDate.parse("2026-10-21")))
+        val three = fresh.copy(days = listOf("2026-10-19", "2026-10-20", "2026-10-21").associateWith { DayRecord(sessions = listOf(writing.id)) })
+        assertEquals(null, Logic.dueNudge(three, writing, LocalDate.parse("2026-10-24")))
+    }
+
+    @Test fun idsAreNeverReused() {
+        val d = migrated()
+        val (first, after) = Logic.allocateId(d, "t")
+        val removed = after.copy(tasks = after.tasks.filter { it.id != first })
+        val (second, _) = Logic.allocateId(removed, "t")
+        assertTrue(first != second)
+        assertTrue(first.drop(1).toInt() >= 27)
     }
 }

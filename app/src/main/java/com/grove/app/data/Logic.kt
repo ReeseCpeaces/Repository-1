@@ -199,4 +199,96 @@ object Logic {
     }
 
     fun weekdayName(d: LocalDate): String = d.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, Locale.US)
+
+    // ----- ids -----
+
+    /** Counter ids look like "t31"; other ids (holy days, old timestamp ids) don't count. */
+    private val NUM = Regex("""^[a-z](\d{1,7})$""")
+
+    /** Highest number used in any id so far, in the setup or in history. */
+    fun highestIdNumber(data: AppData): Int {
+        val ids = data.habits.map { it.id } + data.tasks.map { it.id } + data.goals.map { it.id } + data.books.map { it.id } +
+            data.days.values.flatMap { it.steps.keys + it.tasks.keys + it.sessions + it.pages.keys }
+        return ids.mapNotNull { NUM.find(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
+    }
+
+    /** A fresh id like "t31". The counter only goes up, so deleted ids are never reused. */
+    fun allocateId(data: AppData, prefix: String): Pair<String, AppData> {
+        val n = maxOf(data.nextId, highestIdNumber(data) + 1)
+        return "$prefix$n" to data.copy(nextId = n + 1)
+    }
+
+    // ----- weekly goals (weeks start Monday) -----
+
+    fun weekStart(d: LocalDate): LocalDate = d.minusDays((d.dayOfWeek.value - 1).toLong())
+
+    /** Sunday-first weekday index -> that day in the Monday-start week containing [ref]. */
+    fun dayInWeek(ref: LocalDate, weekday: Int): LocalDate = weekStart(ref).plusDays(((weekday + 6) % 7).toLong())
+
+    fun sessionLogged(data: AppData, day: String, g: Goal): Boolean {
+        val r = data.days[day] ?: return false
+        return g.id in r.sessions || (g.legacyHabit.isNotEmpty() && r.steps[g.legacyHabit].orEmpty().isNotEmpty())
+    }
+
+    fun sessionsThisWeek(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
+        (0L..6L).map { weekStart(ref).plusDays(it) }.count { !it.isAfter(ref) && sessionLogged(data, key(it), g) }
+
+    fun totalSessions(data: AppData, g: Goal): Int = data.days.keys.count { sessionLogged(data, it, g) }
+
+    fun toggleSession(data: AppData, goalId: String): AppData =
+        withDay(data, data.currentDay) { r -> r.copy(sessions = if (goalId in r.sessions) r.sessions - goalId else r.sessions + goalId) }
+
+    private fun pagesLogged(data: AppData, bookId: String, before: LocalDate? = null): Int =
+        data.days.filter { before == null || date(it.key).isBefore(before) }.values.sumOf { it.pages[bookId] ?: 0 }
+
+    /** Page reached in [b]: the starting page plus everything logged, capped at the book's length. */
+    fun bookPage(data: AppData, b: Book): Int = (b.startPage + pagesLogged(data, b.id)).coerceIn(0, b.pages)
+
+    fun bookFinished(data: AppData, b: Book): Boolean = b.pages > 0 && bookPage(data, b) >= b.pages
+
+    fun pagesOn(data: AppData, day: String): Int = data.days[day]?.pages?.values?.sum() ?: 0
+
+    fun pagesThisWeek(data: AppData, ref: LocalDate = groveToday(data)): Int =
+        (0L..6L).map { weekStart(ref).plusDays(it) }.filter { !it.isAfter(ref) }.sumOf { pagesOn(data, key(it)) }
+
+    fun pagesLeft(data: AppData): Int = data.books.sumOf { it.pages - bookPage(data, it) }
+
+    /**
+     * Pages to read this week: what was left when the week began, spread over the weeks until the
+     * deadline, rounded up. Fixed for the whole week; recalculated each Monday.
+     */
+    fun weeklyPageTarget(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int {
+        val ws = weekStart(ref)
+        val leftAtStart = data.books.sumOf { b -> b.pages - (b.startPage + pagesLogged(data, b.id, ws)).coerceIn(0, b.pages) }
+        val weeks = if (g.deadline.isEmpty()) 1L else maxOf(1L, ceilDiv(ChronoUnit.DAYS.between(ws, date(g.deadline)), 7L))
+        return ceilDiv(leftAtStart.toLong(), weeks).toInt()
+    }
+
+    private fun ceilDiv(a: Long, b: Long): Long = if (a <= 0) 0 else (a + b - 1) / b
+
+    fun progress(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
+        if (g.kind == GoalKind.PAGES) pagesThisWeek(data, ref) else sessionsThisWeek(data, g, ref)
+
+    fun target(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
+        if (g.kind == GoalKind.PAGES) weeklyPageTarget(data, g, ref) else g.perWeek
+
+    /** The nudge for [day], if it's that weekday and progress is still under its threshold. */
+    fun dueNudge(data: AppData, g: Goal, day: LocalDate): Nudge? {
+        val n = g.nudges.firstOrNull { it.weekday == weekdayIndex(day) } ?: return null
+        return n.takeIf { progress(data, g, day) < target(data, g, day) * n.below }
+    }
+
+    fun logPages(data: AppData, bookId: String, pages: Int): AppData {
+        val next = withDay(data, data.currentDay) { r ->
+            val total = ((r.pages[bookId] ?: 0) + pages).coerceAtLeast(0)
+            r.copy(pages = if (total == 0) r.pages - bookId else r.pages + (bookId to total))
+        }
+        return next.copy(lastBook = bookId)
+    }
+
+    fun currentBook(data: AppData): Book? =
+        data.books.firstOrNull { it.id == data.lastBook && !bookFinished(data, it) } ?: data.books.firstOrNull { !bookFinished(data, it) }
+
+    /** "1/3 this week", or "4/3 ★" once past the goal. */
+    fun sessionLabel(done: Int, target: Int): String = if (done > target) "$done/$target ★" else "$done/$target this week"
 }

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.grove.app.R
 import com.grove.app.data.AppData
+import com.grove.app.data.GoalKind
 import com.grove.app.data.Habit
 import com.grove.app.data.Logic
 import com.grove.app.data.Role
@@ -134,20 +135,48 @@ private fun Color.through(m: ColorMatrix): Color {
 
 private fun isDormant(data: AppData, h: Habit) = Logic.streakState(data, h).let { it == Logic.StreakState.PAUSED || it == Logic.StreakState.RESET }
 
+/** Where each finished field guide's piece sits: drawable, x, ground line, height. */
+private class Piece(val res: Int, val x: Float, val yb: Float, val h: Float, val ratio: Float = 1f)
+
+private val BOOK_PIECES = mapOf(
+    "trees" to Piece(R.drawable.plant_round, 292f, 300f, 150f, 0.79f),
+    "wildflowers" to Piece(R.drawable.piece_sunflower, 36f, 346f, 34f),
+    "weeds" to Piece(R.drawable.piece_dandelion, 98f, 366f, 24f),
+    "mushrooms" to Piece(R.drawable.piece_mushroom, 246f, 352f, 26f),
+    "birds" to Piece(R.drawable.piece_bird, 112f, 176f, 26f),
+    "mammals" to Piece(R.drawable.piece_deer, 18f, 300f, 56f),
+    "rocks" to Piece(R.drawable.piece_gem, 286f, 364f, 18f),
+    "frogs" to Piece(R.drawable.piece_frog, 60f, 374f, 22f),
+    "snakes" to Piece(R.drawable.piece_snake, 226f, 376f, 22f),
+)
+
+/** Something that grows plants: [seed] keeps its placement stable, [total] is how much it has grown. */
+private class Grower(val seed: Int, val type: PlantType, val total: Int, val every: Int, val ageScale: Float, val dormant: Boolean)
+
+private fun growers(data: AppData): List<Grower> {
+    val out = data.habits.mapIndexed { k, h ->
+        val p = PLANTS[k % PLANTS.size]
+        Grower(k, p, Logic.totalDays(data, h), if (p.small) 5 else 8, 1f, isDormant(data, h))
+    }.toMutableList()
+    // Writing sessions grow teal trees where the old daily habit's grew. Weekly goals never go dormant.
+    data.goals.filter { it.kind == GoalKind.SESSIONS }.forEach { g ->
+        out += Grower(3, PLANTS[3], Logic.totalSessions(data, g), 4, 2.3f, false)
+    }
+    return out
+}
+
 /** Trees fill the middle and back, a few frame the foreground edges; the wolf keeps the open middle. */
 private fun placePlants(data: AppData): List<Placed> {
     val out = mutableListOf<Placed>()
-    data.habits.forEachIndexed { k, h ->
-        val p = PLANTS[k % PLANTS.size]
-        val total = Logic.totalDays(data, h)
-        val every = if (p.small) 5 else 8
-        val count = if (total <= 0) 0 else min(if (p.small) 16 else 8, 1 + total / every)
-        val dormant = isDormant(data, h)
+    for (gr in growers(data)) {
+        val p = gr.type
+        val k = gr.seed
+        val count = if (gr.total <= 0) 0 else min(if (p.small) 16 else 8, 1 + gr.total / gr.every)
         for (i in 0 until count) {
             val r1 = rnd(k * 97 + i * 13 + 1)
             val r2 = rnd(k * 53 + i * 29 + 7)
             val r3 = rnd(k * 31 + i * 17 + 3)
-            val age = total - i * every
+            val age = (gr.total - i * gr.every) * gr.ageScale
             val sc = if (age < 42) 0.2f + age / 52f else min(1.2f, 1f + (age - 42) / 400f)
             val edge = !p.small && r2 > 0.8f
             val yb = when {
@@ -163,8 +192,22 @@ private fun placePlants(data: AppData): List<Placed> {
                 r1 < 0.5f -> r1 * 70 - w * 0.3f
                 else -> W - w * 0.7f - (1 - r1) * 70
             }
-            out += Placed(p.res(i), x, yb - hh, w, hh, dormant, r3 * 2 * PI.toFloat())
+            out += Placed(p.res(i), x, yb - hh, w, hh, gr.dormant, r3 * 2 * PI.toFloat())
         }
+    }
+    // The reading seedling grows a little with every page logged.
+    if (data.goals.any { it.kind == GoalKind.PAGES }) {
+        val pages = data.days.values.sumOf { r -> r.pages.values.sum() }
+        val total = data.books.sumOf { it.pages }.coerceAtLeast(1)
+        val h = 16f + 54f * min(1f, pages.toFloat() / total)
+        out += Placed(R.drawable.plant_seedling, 92f - h / 2, 352f - h, h, h, false, 1.3f)
+    }
+    // Each finished field guide adds its piece for good.
+    for (b in data.books) {
+        val piece = BOOK_PIECES[b.piece] ?: continue
+        if (!Logic.bookFinished(data, b)) continue
+        val w = piece.h * piece.ratio
+        out += Placed(piece.res, piece.x, piece.yb - piece.h, w, piece.h, false, rnd(b.pages) * 6f)
     }
     return out.sortedBy { it.y + it.h }
 }
@@ -197,6 +240,8 @@ fun ForestScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                 }
             }
 
+            if (data.goals.isNotEmpty()) Column { GoalCards(data, go) }
+
             Text(message(data, mood, sum), fontSize = 15.sp)
 
             Card {
@@ -218,6 +263,27 @@ fun ForestScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                                 modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(if (dormant) GroveColors.WarnBg else GroveColors.Surface2)
                                     .padding(horizontal = 10.dp, vertical = 4.dp),
                             )
+                        }
+                    }
+                }
+            }
+            if (data.goals.isNotEmpty()) {
+                Card {
+                    Column {
+                        data.goals.forEach { g ->
+                            val (name, swatch, detail) = if (g.kind == GoalKind.PAGES) {
+                                val finished = data.books.count { Logic.bookFinished(data, it) }
+                                Triple("Reading seedling", Color(0xFF86D72F), "${g.name} · $finished of ${data.books.size} books finished, each adds its own piece")
+                            } else Triple(PLANTS[3].name, PLANTS[3].swatch, "${g.name} · ${Logic.totalSessions(data, g)} sessions")
+                            Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(swatch))
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                    Text(name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(detail, fontSize = 12.sp, color = GroveColors.Muted, maxLines = 2)
+                                }
+                                Text("${Logic.progress(data, g)}/${Logic.target(data, g)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GroveColors.Green,
+                                    modifier = Modifier.clip(RoundedCornerShape(999.dp)).background(GroveColors.Surface2).padding(horizontal = 10.dp, vertical = 4.dp))
+                            }
                         }
                     }
                 }
@@ -259,18 +325,20 @@ private fun Scene(data: AppData): Mood {
     val allDone = done == data.habits.size && data.habits.isNotEmpty()
 
     // A short howl and hop each time something gets checked off.
-    var lastDone by remember { mutableIntStateOf(done) }
+    // Any progress counts as a reason to howl: habits, writing sessions, pages.
+    val cheer = done + data.today.sessions.size + Logic.pagesOn(data, data.currentDay)
+    var lastDone by remember { mutableIntStateOf(cheer) }
     var celebrating by remember { mutableStateOf(false) }
     val hop = remember { Animatable(0f) }
-    LaunchedEffect(done) {
-        if (done > lastDone) {
+    LaunchedEffect(cheer) {
+        if (cheer > lastDone) {
             celebrating = true
             hop.animateTo(-16f, tween(280)); hop.animateTo(0f, tween(240))
             hop.animateTo(-6f, tween(150)); hop.animateTo(0f, tween(150))
             kotlinx.coroutines.delay(1600)
             celebrating = false
         }
-        lastDone = done
+        lastDone = cheer
     }
     val pose = when {
         mood == Mood.PREDAWN -> Pose.SLEEP
@@ -288,7 +356,7 @@ private fun Scene(data: AppData): Mood {
     val land = matrix(mood.brightness, mood.saturation)
     val landFilter = if (mood == Mood.DAY) null else ColorFilter.colorMatrix(land)
     val dormantFilter = ColorFilter.colorMatrix(matrix(mood.brightness * 0.95f, mood.saturation * 0.15f))
-    val plants = remember(data.habits, data.days) { placePlants(data) }
+    val plants = remember(data.habits, data.days, data.goals, data.books) { placePlants(data) }
     val aria = "Forest with ${plants.size} plants. Your wolf is ${if (pose == Pose.SLEEP) "asleep" else "awake"}."
 
     BoxWithConstraints(
