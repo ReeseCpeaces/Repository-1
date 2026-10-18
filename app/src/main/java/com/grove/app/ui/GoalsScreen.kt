@@ -49,6 +49,7 @@ import com.grove.app.data.Goal
 import com.grove.app.data.GoalKind
 import com.grove.app.data.Logic
 import com.grove.app.data.Store
+import com.grove.app.obsidian.ObsidianSync
 
 /** "Mushrooms of the Upper Midwest (Marrone & Yerich)" -> "Mushrooms of the Upper Midwest". */
 fun shortTitle(b: Book) = b.title.substringBefore(" (").substringBefore(":")
@@ -109,7 +110,9 @@ fun LogPagesDialog(data: AppData, initialBook: Book? = null, onClose: () -> Unit
     val open = data.books.filter { !Logic.bookFinished(data, it) }
     var bookId by remember { mutableStateOf((initialBook ?: Logic.currentBook(data))?.id.orEmpty()) }
     var pages by remember { mutableStateOf("") }
+    var logged by remember { mutableStateOf<Triple<Book, Int, Int>?>(null) }
     val n = pages.toIntOrNull() ?: 0
+    logged?.let { (b, from, to) -> AfterPagesDialog(data, b, from, to, onClose); return }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Log pages") },
@@ -137,12 +140,40 @@ fun LogPagesDialog(data: AppData, initialBook: Book? = null, onClose: () -> Unit
         },
         confirmButton = {
             TextButton(enabled = n > 0 && bookId.isNotEmpty(), onClick = {
+                val b = data.books.first { it.id == bookId }
+                val from = Logic.bookPage(data, b)
                 Store.update(context) { Logic.logPages(it, bookId, n) }
-                onClose()
+                // Then offer a line for the note (and the book's own note), unless both are off.
+                if (Logic.wantsLine(data, Logic.READING) || b.notePath.isNotEmpty()) logged = Triple(b, from + 1, minOf(b.pages, from + n)) else onClose()
             }) { Text("Add $n pages") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
     )
+}
+
+/** Right after logging pages: "Add a line?" for the daily note, and a button to open the book's note. */
+@Composable
+private fun AfterPagesDialog(data: AppData, b: Book, from: Int, to: Int, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val openNote: (@Composable () -> Unit)? = if (b.notePath.isEmpty()) null else {
+        { TextButton(onClick = { ObsidianSync.openNote(context, data, b.notePath); onClose() }) { Text("Add a note? Open ${shortTitle(b)}") } }
+    }
+    if (Logic.wantsLine(data, Logic.READING)) {
+        LinePromptDialog(
+            about = "${shortTitle(b)}, p. $from–$to",
+            prefix = "Reading",
+            onSave = { t -> Store.update(context) { Logic.addLine(it, Logic.READING, "Reading (${shortTitle(b)}, p. $from–$to): $t") }; onClose() },
+            onSkip = { Store.update(context) { Logic.skipLine(it, Logic.READING) }; onClose() },
+            extra = openNote,
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("Logged p. $from–$to") },
+            text = { openNote?.invoke() },
+            confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+        )
+    }
 }
 
 /** All the books with progress; finished ones get a check and move to the bottom. */
@@ -182,7 +213,10 @@ fun BooksScreen(data: AppData, back: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                         color = GroveColors.Green, trackColor = GroveColors.Line,
                     )
-                    Text("$page / ${b.pages}", fontSize = 12.sp, color = GroveColors.Muted)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("$page / ${b.pages}", Modifier.weight(1f), fontSize = 12.sp, color = GroveColors.Muted)
+                        if (b.notePath.isNotEmpty()) TextButton(onClick = { ObsidianSync.openNote(context, data, b.notePath) }) { Text("Open note", fontSize = 13.sp) }
+                    }
                 }
             }
             Spacer(Modifier.height(32.dp))

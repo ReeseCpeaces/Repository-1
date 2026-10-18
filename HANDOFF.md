@@ -40,6 +40,22 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
     progress bars. Weekly target = pages left at the start of the week ÷ weeks left until
     2027-06-21, rounded up (74 from Oct 19, 2026). Ticks `read` in the note on days with pages.
     Nudges Thu 5:30 PM if under a third of the target, Sat 5:30 PM if under the target.
+- **Book notes:** each book links to its Media DB note in `Books/` (`Book.notePath`, matched by title
+  with `Logic.titleScore`; notes with `subType: Druid book` that match no book are added as new books).
+  `obsidian/BookNotes.kt` writes `pagesRead`, `lastReadOn`, `pages` (only if missing), and when finished
+  `read: true` + `finished: yyyy-MM-dd` (back to `read: false` and no `finished` if pages drop below the total).
+  Media DB's `lastRead` and everything else in the note are left alone; an unreadable note is never written.
+  In a book note `read` = finished; in the daily note `read` = read something that day. Books screen has
+  "Open note" (`obsidian://open?vault=<vault folder name>&file=<path>`).
+- **"Add a line?"** (`ui/LinePrompt.kt`, `Logic.lineItems`): after checking off Morning practice (`SOP:`),
+  Before-bed practice (`Meditation:`), nature tasks t3/t8 or prop `fifteen in nature` (`Nature:`), the
+  elderberry t9 or prop `tree` (`Plant:`), or logging pages (`Reading (<book>, p. X–Y):`), a box offers one
+  line. Saved in `DayRecord.lines`; `ObsidianSync` appends them as `- Prefix: text` at the end of the
+  `## Daily Log` section, outside the grove block (`linesWritten` keeps them from being written twice).
+  Skip/tap outside = no line and not asked again that day (`DayRecord.prompted`). Things checked off
+  from a widget or notification are offered when the app is next opened. Per-item off switches in
+  Settings (`Settings.linePromptOff`). Reese's Dataview tables collect these lines by their exact
+  prefixes (`Nature:`, `Plant:`, `Meditation:`, `SOP:`, `Lifestyle:`), so keep them.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
@@ -68,7 +84,8 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   `appliedInbox` (history.json) and deletes them.
 - **Connector (`connector/`):** an MCP server that runs on the server and reads/edits those files.
   Tools: `grove_overview`, `grove_history`, `grove_setup`, add/update/remove habit and task, holy
-  days, settings, `grove_log_pages`, `grove_log_session`, `grove_add_book`, `grove_update_book`. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
+  days, settings, `grove_log_pages`, `grove_log_session`, `grove_add_book`, `grove_update_book`.
+  The connector writes book-note progress itself (same rules as the app) when pages are logged or a book is edited. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
   ```powershell
   claude mcp add --scope user grove -- ssh reese@10.0.0.118 /home/reese/grove-src/connector/.venv/bin/python /home/reese/grove-src/connector/grove_mcp.py --vault /mnt/bigdrive/Obsidian
   ```
@@ -81,7 +98,7 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 | `app/src/main/java/com/grove/app/data/` | `Models.kt` (data), `Logic.kt` (streaks, day rollover, schedules; pure, unit-tested), `Seed.kt` (first-run habits/tasks/holy days from the TickTick setup), `Store.kt` (JSON file + StateFlow), `Effects.kt` (what runs after every change) |
 | `notify/` | `AlarmScheduler`, `ReminderReceiver` (alarms, buttons, boot), `Notifier` (channels, pinned + reminder notifications), `SnoozeActivity` |
 | `widget/Widgets.kt` | Glance widgets and their actions |
-| `obsidian/` | `NoteText` (pure note edits, tested), `ObsidianSync` (daily note via SAF), `VaultSync` (grove.json / history.json) |
+| `obsidian/` | `NoteText` (pure note edits, tested), `ObsidianSync` (daily note via SAF), `VaultSync` (grove.json / history.json / inbox), `BookNotes` (book notes in `Books/`) |
 | `data/Migrate.kt` | One-way data upgrades run on every load/change (habits h4/h5 → goals, books, `nextId`) |
 | `ui/` | Compose screens: Today, Day, Habit, Edit, Settings, Forest, Goals/Books (`GoalsScreen.kt`) |
 | `art/`, `tools/svg2vector.py` | Source SVGs and the converter to `res/drawable` (wolf split by hand into `wolf_tail/body/head.xml`) |

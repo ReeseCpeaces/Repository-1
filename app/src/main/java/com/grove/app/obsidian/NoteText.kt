@@ -96,4 +96,76 @@ object NoteText {
         val sep = if (text.endsWith("\n") || text.isEmpty()) "" else "\n"
         return text + sep + "\n## Daily Log\n" + block + "\n"
     }
+
+    /** Simple `key: value` pairs from the frontmatter (quotes stripped). Nested values are skipped. */
+    fun frontmatter(text: String): Map<String, String> {
+        val lines = text.replace("\r\n", "\n").split("\n")
+        if (lines.firstOrNull()?.trim() != "---") return emptyMap()
+        val out = linkedMapOf<String, String>()
+        for (line in lines.drop(1)) {
+            if (line.trim() == "---") break
+            if (line.startsWith(" ") || line.startsWith("-") || !line.contains(':')) continue
+            val v = line.substringAfter(':').trim()
+            out[line.substringBefore(':').trim()] = v.removeSurrounding("\"").removeSurrounding("'")
+        }
+        return out
+    }
+
+    /**
+     * Set frontmatter keys to raw YAML values (null removes the key), adding missing ones at the end
+     * of the frontmatter. Every other line, and the body, stays exactly as it was.
+     */
+    fun setFrontmatter(text: String, values: Map<String, String?>): String {
+        if (values.isEmpty()) return text
+        val nl = if (text.contains("\r\n")) "\r\n" else "\n"
+        val lines = text.split(nl).toMutableList()
+        val hasFront = lines.firstOrNull()?.trim() == "---" && lines.drop(1).any { it.trim() == "---" }
+        if (!hasFront) {
+            val added = values.filterValues { it != null }.map { (k, v) -> "$k: $v" }
+            return if (added.isEmpty()) text else (listOf("---") + added + listOf("---") + lines).joinToString(nl)
+        }
+        val remaining = values.toMutableMap()
+        var i = 1
+        while (i < lines.size && lines[i].trim() != "---") {
+            val line = lines[i]
+            val key = if (line.startsWith(" ") || line.startsWith("-") || !line.contains(':')) "" else line.substringBefore(':').trim()
+            if (key.isNotEmpty() && remaining.containsKey(key)) {
+                val v = remaining.remove(key)
+                // Drop an indented list or block that belonged to the old value.
+                while (i + 1 < lines.size && lines[i + 1].trim() != "---" && (lines[i + 1].startsWith(" ") || lines[i + 1].startsWith("-"))) lines.removeAt(i + 1)
+                if (v == null) { lines.removeAt(i); continue }
+                lines[i] = "$key: $v"
+            }
+            i++
+        }
+        lines.addAll(i, remaining.filterValues { it != null }.map { (k, v) -> "$k: $v" })
+        return lines.joinToString(nl)
+    }
+
+    /**
+     * Add list items to the end of the "## Daily Log" section (before the next heading of level 1–2),
+     * outside Grove's summary block. Adds the heading if the note has none.
+     */
+    fun appendLogLines(text: String, items: List<String>): String {
+        if (items.isEmpty()) return text
+        val nl = if (text.contains("\r\n")) "\r\n" else "\n"
+        val add = items.map { "- " + it.replace(Regex("\\s*\\n\\s*"), " ").trim() }
+        val lines = text.split(nl).toMutableList()
+        val head = lines.indexOfFirst { Regex("^##\\s+Daily Log\\s*$").matches(it) }
+        if (head < 0) {
+            val sep = if (text.endsWith("\n") || text.isEmpty()) "" else nl
+            return text + sep + nl + "## Daily Log" + nl + add.joinToString(nl) + nl
+        }
+        var end = lines.size
+        var inBlock = false
+        for (j in head + 1 until lines.size) {
+            if (lines[j].contains(START)) inBlock = true
+            if (lines[j].contains(END)) inBlock = false
+            if (!inBlock && Regex("^#{1,2}\\s").containsMatchIn(lines[j])) { end = j; break }
+        }
+        var at = end
+        while (at > head + 1 && lines[at - 1].isBlank()) at--
+        lines.addAll(at, add)
+        return lines.joinToString(nl)
+    }
 }

@@ -152,6 +152,51 @@ def test_ids_are_never_reused():
     assert g.add_habit("C")["id"] == "h29"
 
 
+SNAKES_NOTE = """---
+type: book
+subType: Druid book
+title: "Michigan Snakes: A Field Guide and Pocket Reference"
+pages: 76
+read: false
+lastRead: ""
+tags:
+  - druid
+---
+My notes stay put.
+"""
+
+
+def test_book_notes_get_progress():
+    g = goal_vault()
+    books = g.vault / "Books"
+    books.mkdir()
+    (books / "Michigan Snakes.md").write_text(SNAKES_NOTE)
+    (books / "Some Novel.md").write_text("---\ntype: book\nsubType: Novel\ntitle: Michigan Snakes\npages: 10\n---\n")
+    b = g.set_book("Michigan Snakes (Harding & Holman)", book_id="b38", start_page=60)  # 76 pages; linking happens on any edit
+    assert b["notePath"] == "Books/Michigan Snakes.md"
+    note = (books / "Michigan Snakes.md").read_text()
+    assert "pagesRead: 60" in note and "read: false" in note and 'lastRead: ""' in note and note.endswith("My notes stay put.\n")
+    assert "  - druid" in note and "finished" not in note
+    assert "Updated Books/Michigan Snakes.md" in g.log_pages("b38", 16)
+    note = (books / "Michigan Snakes.md").read_text()
+    assert "pagesRead: 76" in note and "read: true" in note and "finished: 2026-10-19" in note and "lastReadOn: 2026-10-19" in note
+    assert "note: Books/Michigan Snakes.md" in g.overview()
+    g.log_pages("b38", -5)  # a correction takes it back below the total
+    note = (books / "Michigan Snakes.md").read_text()
+    assert "pagesRead: 71" in note and "read: false" in note and "finished" not in note
+
+
+def test_frontmatter_edits_only_touch_given_keys():
+    text = "---\na: 1\nlist:\n  - x\nb: 2\n---\nbody\n"
+    assert Grove.set_frontmatter(text, {"list": "3", "c": "4", "a": None}) == "---\nlist: 3\nb: 2\nc: 4\n---\nbody\n"
+    assert Grove.frontmatter(text) == {"a": "1", "list": "", "b": "2"}
+    g = Grove(make_vault())
+    assert g.title_score("Michigan Trees (Barnes & Wagner)", "Michigan Trees, Revised and Updated: A Guide") == 1.0
+    assert g.title_score("Michigan Trees", "Trees of Michigan") == 0.9
+    assert g.title_score("Michigan Trees (Barnes & Wagner)", "Michigan Trees: A Guide to the Trees") == 1.0
+    assert g.title_score("Michigan Snakes (Harding & Holman)", "Michigan Frogs, Toads, and Salamanders") < 0.6
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

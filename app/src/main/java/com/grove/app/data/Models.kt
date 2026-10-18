@@ -87,9 +87,12 @@ data class Goal(
     val created: String,
 )
 
-/** A book for a page goal. [piece] names the forest piece it adds when finished. */
+/**
+ * A book for a page goal. [piece] names the forest piece it adds when finished. [notePath] is its
+ * note in the vault (e.g. "Books/Michigan Snakes.md"), which Grove keeps up to date with progress.
+ */
 @Serializable
-data class Book(val id: String, val title: String, val pages: Int, val startPage: Int = 0, val piece: String = "")
+data class Book(val id: String, val title: String, val pages: Int, val startPage: Int = 0, val piece: String = "", val notePath: String = "")
 
 @Serializable
 data class HolyDay(val id: String, val name: String, val date: String, val detail: String)
@@ -106,6 +109,10 @@ data class Settings(
     val cutoffHour: Int = 14,
     val defaultSnoozeMinutes: Int = 10,
     val wolfName: String = "",
+    /** Vault folder with one note per book (Media DB). Notes with subType "Druid book" join the Books screen. */
+    val booksFolder: String = "Books",
+    /** Things that shouldn't ask "Add a line?" when checked off: habit/task ids, or "reading". */
+    val linePromptOff: List<String> = emptyList(),
 )
 
 /** What got done on one logical day. */
@@ -123,6 +130,12 @@ data class DayRecord(
     val sessions: List<String> = emptyList(),
     /** Book id -> pages read this day. */
     val pages: Map<String, Int> = emptyMap(),
+    /** Lines for the daily note's Daily Log, like "Nature: saw a heron". */
+    val lines: List<String> = emptyList(),
+    /** How many of [lines] are already in the note. */
+    val linesWritten: Int = 0,
+    /** "Add a line?" prompts already answered or skipped this day (habit/task ids, "reading"). */
+    val prompted: List<String> = emptyList(),
 )
 
 @Serializable

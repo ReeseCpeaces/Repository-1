@@ -14,6 +14,8 @@ Phone (Grove app)  <-- Syncthing -->  Server: vault/Grove/grove.json + history.j
   Obsidian vault. Syncthing copies them to the server.
 - This connector runs on the server, reads those files, and edits `grove.json` when Claude asks.
 - Syncthing copies the edit back to the phone; Grove applies it the next time the app opens.
+- Book progress is also written into each book's note in `Books/` (`pagesRead`, `lastReadOn`, and
+  `read: true` / `finished` when it's done), by the app and by this connector.
 - Logged pages and writing sessions go into `Grove/inbox/` as small files. The app applies each one
   once and deletes it. Until then the connector already counts them in its answers.
 

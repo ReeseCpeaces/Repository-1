@@ -3,6 +3,7 @@ package com.grove.app.data
 import android.content.Context
 import com.grove.app.notify.AlarmScheduler
 import com.grove.app.notify.Notifier
+import com.grove.app.obsidian.BookNotes
 import com.grove.app.obsidian.ObsidianSync
 import com.grove.app.obsidian.VaultSync
 import com.grove.app.widget.Widgets
@@ -16,6 +17,7 @@ object Effects {
         Widgets.updateAll(context)
         ObsidianSync.syncAsync(context, old, new)
         VaultSync.exportAsync(context, old, new)
+        BookNotes.syncAsync(context, old, new)
     }
 
     /** Full refresh after boot, an app update, or opening the app. Call off the main thread. */
@@ -24,6 +26,8 @@ object Effects {
         runCatching { VaultSync.importIfChanged(context) }
         // Apply pages and sessions logged through the connector.
         runCatching { VaultSync.applyInbox(context) }
+        // Link Druid book notes in the vault to the Books screen and update their progress.
+        runCatching { BookNotes.scan(context) }
         Store.refreshDay(context)
         val data = Store.get(context)
         Notifier.showPinned(context, data)

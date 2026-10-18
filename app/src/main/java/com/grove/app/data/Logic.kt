@@ -291,4 +291,130 @@ object Logic {
 
     /** "1/3 this week", or "4/3 ★" once past the goal. */
     fun sessionLabel(done: Int, target: Int): String = if (done > target) "$done/$target ★" else "$done/$target this week"
+
+    // ----- book notes (Media DB notes in the vault's Books folder) -----
+
+    /** "Michigan Snakes: A Field Guide" and "Michigan Snakes (Harding & Holman)" -> "michigan snakes". */
+    fun titleKey(title: String): String =
+        title.lowercase().substringBefore(" (").substringBefore(":").replace(Regex("[^a-z0-9]+"), " ").trim()
+
+    private val STOP = setOf("a", "an", "the", "of", "and", "to", "for", "in")
+
+    /** 1.0 when one title is the other plus a subtitle; otherwise how many words they share (0–1). */
+    fun titleScore(a: String, b: String): Double {
+        val x = titleKey(a)
+        val y = titleKey(b)
+        if (x.isEmpty() || y.isEmpty()) return 0.0
+        if (x == y || x.startsWith("$y ") || y.startsWith("$x ")) return 1.0
+        val wx = x.split(" ").filter { it !in STOP }.toSet()
+        val wy = y.split(" ").filter { it !in STOP }.toSet()
+        if (minOf(wx.size, wy.size) >= 2 && (wx.containsAll(wy) || wy.containsAll(wx))) return 0.9
+        return (wx intersect wy).size.toDouble() / (wx union wy).size.coerceAtLeast(1)
+    }
+
+    /** Forest piece for a new book, guessed from its title. */
+    fun pieceFor(title: String): String {
+        val t = title.lowercase()
+        return listOf(
+            "mushroom" to "mushrooms", "fung" to "mushrooms", "wildflower" to "wildflowers", "flower" to "wildflowers",
+            "weed" to "weeds", "tree" to "trees", "bird" to "birds", "mammal" to "mammals", "rock" to "rocks",
+            "mineral" to "rocks", "frog" to "frogs", "toad" to "frogs", "salamander" to "frogs", "snake" to "snakes", "reptile" to "snakes",
+        ).firstOrNull { it.first in t }?.second.orEmpty()
+    }
+
+    /** A "Druid book" note found in the vault. */
+    data class BookNote(val path: String, val title: String, val pages: Int)
+
+    /**
+     * Link books to their notes by title (keeping links already made), and add a book for every
+     * Druid book note that has no book yet. Notes without a page count wait until it's filled in.
+     */
+    fun linkBookNotes(data: AppData, notes: List<BookNote>): AppData {
+        val claimed = data.books.map { it.notePath }.filter { p -> notes.any { it.path == p } }.toMutableSet()
+        var d = data.copy(books = data.books.map { b ->
+            if (b.notePath in claimed) return@map b
+            val best = notes.filter { it.path !in claimed }.maxByOrNull { titleScore(b.title, it.title) }
+            if (best != null && titleScore(b.title, best.title) >= 0.6) { claimed += best.path; b.copy(notePath = best.path) } else b
+        })
+        for (n in notes) {
+            if (n.path in claimed || n.pages <= 0) continue
+            val (id, next) = allocateId(d, "b")
+            d = next.copy(books = next.books + Book(id, n.title, n.pages, piece = pieceFor(n.title), notePath = n.path))
+            claimed += n.path
+        }
+        return d
+    }
+
+    /** Last day pages were logged for [b], or null. */
+    fun lastReadOn(data: AppData, b: Book): String? = data.days.filter { (it.value.pages[b.id] ?: 0) > 0 }.keys.maxOrNull()
+
+    /** Day [b] reached its last page through logged pages, or null. */
+    fun finishedOn(data: AppData, b: Book): String? {
+        var total = b.startPage
+        for (day in data.days.keys.sorted()) {
+            total += data.days[day]?.pages?.get(b.id) ?: 0
+            if (total >= b.pages) return day
+        }
+        return null
+    }
+
+    /**
+     * What Grove writes into a book note's frontmatter, given what's there now ([note]); null removes
+     * the key. `read` here means finished (Earth Path lists it under Read). Media DB's `lastRead` is left alone.
+     */
+    fun bookNoteValues(data: AppData, b: Book, note: Map<String, String>): Map<String, String?> {
+        val out = linkedMapOf<String, String?>("pagesRead" to bookPage(data, b).toString())
+        lastReadOn(data, b)?.let { out["lastReadOn"] = it }
+        if (note["pages"].isNullOrBlank()) out["pages"] = b.pages.toString()
+        if (bookFinished(data, b)) {
+            out["read"] = "true"
+            if (note["finished"].isNullOrBlank()) out["finished"] = finishedOn(data, b) ?: data.currentDay
+        } else if (!note["finished"].isNullOrBlank()) {
+            // Grove marked it finished before, but the pages went back down.
+            out["read"] = "false"
+            out["finished"] = null
+        }
+        return out
+    }
+
+    // ----- "Add a line?" for the daily note -----
+
+    const val READING = "reading"
+
+    /** Something that offers "Add a line?" when checked off: [key] is a habit/task id or [READING]. */
+    data class LineItem(val key: String, val label: String, val prefix: String)
+
+    fun lineItems(data: AppData): List<LineItem> {
+        val out = mutableListOf<LineItem>()
+        data.habits.firstOrNull { it.role == Role.MORNING }?.let { out += LineItem(it.id, it.name, "SOP") }
+        data.habits.firstOrNull { it.role == Role.BEDTIME }?.let { out += LineItem(it.id, it.name, "Meditation") }
+        for (t in data.tasks) {
+            when {
+                t.prop == "fifteen in nature" || t.id == "t3" || t.id == "t8" -> out += LineItem(t.id, t.name, "Nature")
+                t.prop == "tree" || t.id == "t9" -> out += LineItem(t.id, t.name, "Plant")
+            }
+        }
+        data.goals.firstOrNull { it.kind == GoalKind.PAGES }?.let { out += LineItem(READING, it.name, "Reading") }
+        return out
+    }
+
+    fun wantsLine(data: AppData, key: String): Boolean = key !in data.settings.linePromptOff && key !in data.today.prompted
+
+    /** A habit or task checked off today that hasn't been offered "Add a line?" yet (e.g. done from a widget). */
+    fun pendingLine(data: AppData): LineItem? = lineItems(data).firstOrNull { item ->
+        item.key != READING && wantsLine(data, item.key) &&
+            (data.today.tasks.containsKey(item.key) || data.habits.firstOrNull { it.id == item.key }?.let { isDoneToday(data, it) } == true)
+    }
+
+    /** Save "Prefix: text" for today's note. Reading can be asked again after another log; the rest once a day. */
+    fun addLine(data: AppData, key: String, line: String): AppData = withDay(data, data.currentDay) { r ->
+        r.copy(lines = r.lines + line, prompted = if (key == READING || key in r.prompted) r.prompted else r.prompted + key)
+    }
+
+    /** One tap: no line, and don't ask again today. */
+    fun skipLine(data: AppData, key: String): AppData =
+        withDay(data, data.currentDay) { r -> if (key in r.prompted) r else r.copy(prompted = r.prompted + key) }
+
+    fun markLinesWritten(data: AppData, day: String, n: Int): AppData =
+        if (!data.days.containsKey(day)) data else withDay(data, day) { r -> r.copy(linesWritten = maxOf(r.linesWritten, n)) }
 }

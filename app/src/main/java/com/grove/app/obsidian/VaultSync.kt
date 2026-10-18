@@ -180,7 +180,8 @@ object VaultSync {
     fun applyInbox(context: Context): Boolean {
         val data = Store.get(context)
         val inbox = folder(context, data)?.findFile("inbox") ?: return false
-        val files = inbox.listFiles().filter { it.name?.endsWith(".json") == true }
+        // Names start with the time they were logged, so a correction lands after what it corrects.
+        val files = inbox.listFiles().filter { it.name?.endsWith(".json") == true }.sortedBy { it.name }
         if (files.isEmpty()) return false
         val entries = files.mapNotNull { f ->
             read(context, f)?.let { text -> runCatching { json.decodeFromString(InboxEntry.serializer(), text) }.getOrNull() }?.let { f to it }
@@ -236,7 +237,9 @@ object VaultSync {
         `legacyHabit`, `created`.
 
         Book fields: `id`, `title`, `pages`, `startPage` (pages already read before logging began), `piece` (forest
-        piece added when finished: trees, wildflowers, weeds, mushrooms, birds, mammals, rocks, frogs, snakes, or "").
+        piece added when finished: trees, wildflowers, weeds, mushrooms, birds, mammals, rocks, frogs, snakes, or ""),
+        `notePath` (the book's note in the vault, e.g. "Books/Michigan Snakes.md"; Grove links notes with
+        `subType: Druid book` by title and writes `pagesRead`, `lastReadOn`, `read` and `finished` into them).
 
         `nextId`: the next number for new ids. Take ids from it (e.g. "t31", then set nextId to 32); never reuse an id.
 
@@ -246,6 +249,8 @@ object VaultSync {
         Holy day fields: `id`, `name`, `date`, `detail`.
 
         Settings: `dailyNotePath`, `templatePath`, `cutoffHour` (backup hour a new day starts),
-        `defaultSnoozeMinutes`, `wolfName`. Leave `vaultUri` empty; it's set on the phone.
+        `defaultSnoozeMinutes`, `wolfName`, `booksFolder` (where the book notes are, default "Books"),
+        `linePromptOff` (habit/task ids, or "reading", that shouldn't ask "Add a line?"). Leave `vaultUri` empty;
+        it's set on the phone.
     """.trimIndent() + "\n"
 }

@@ -24,7 +24,8 @@ class GroveError(ValueError):
 
 class Grove:
     def __init__(self, vault: str | os.PathLike):
-        self.dir = Path(vault).expanduser() / "Grove"
+        self.vault = Path(vault).expanduser()
+        self.dir = self.vault / "Grove"
         self.setup_path = self.dir / "grove.json"
         self.history_path = self.dir / "history.json"
         self.inbox = self.dir / "inbox"
@@ -196,6 +197,11 @@ class Grove:
         names = ", ".join(f"{b['id']} {b['title']}" for b in books)
         raise GroveError(f"Couldn't tell which book {book!r} means. Use an id: {names}")
 
+    @staticmethod
+    def inbox_id() -> str:
+        """Starts with the time, so the app applies logs in the order they were made."""
+        return f"{time.time_ns() // 1000:016d}-{uuid.uuid4().hex[:8]}"
+
     def _write_inbox(self, entry: dict) -> None:
         self.inbox.mkdir(exist_ok=True)
         tmp = self.inbox / f".{entry['id']}.tmp"
@@ -208,10 +214,12 @@ class Grove:
         if pages == 0:
             raise GroveError("pages must not be 0.")
         day = self.check_date(day) or history["currentDay"]
-        self._write_inbox({"id": uuid.uuid4().hex, "type": "pages", "day": day, "book": b["id"], "pages": pages})
+        self._write_inbox({"id": self.inbox_id(), "type": "pages", "day": day, "book": b["id"], "pages": pages})
         eff = self.effective_history()
         goal = next((g for g in setup.get("goals", []) if g["kind"] == "pages"), None)
         msg = f"Logged {pages} pages of {b['title']} on {day}: now p. {self.book_page(eff, b)} of {b['pages']}."
+        if self.sync_book_note(eff, b):
+            msg += f" Updated {b['notePath']}."
         if goal:
             done, target = self.progress(setup, eff, goal, date.fromisoformat(eff["currentDay"]))
             msg += f" This week: {done} / {target} pages."
@@ -227,7 +235,7 @@ class Grove:
         eff = self.effective_history()
         if self.session_logged(eff, day, g):
             return f"{g['name']} already has a session on {day} (one per day)."
-        self._write_inbox({"id": uuid.uuid4().hex, "type": "session", "day": day, "goal": g["id"]})
+        self._write_inbox({"id": self.inbox_id(), "type": "session", "day": day, "goal": g["id"]})
         eff = self.effective_history()
         done, target = self.progress(setup, eff, g, date.fromisoformat(eff["currentDay"]))
         return f"Logged a {g['name']} session on {day}: {done}/{target} this week."
@@ -240,7 +248,7 @@ class Grove:
         else:
             if not title or not pages:
                 raise GroveError("A new book needs a title and pages.")
-            b = {"id": self.new_id("b", setup), "title": title, "pages": 0, "startPage": 0, "piece": ""}
+            b = {"id": self.new_id("b", setup), "title": title, "pages": 0, "startPage": 0, "piece": self.piece_for(title)}
             setup["books"].append(b)
         if title:
             b["title"] = title
@@ -250,8 +258,150 @@ class Grove:
             b["pages"] = pages
         if start_page is not None:
             b["startPage"] = max(0, min(start_page, b["pages"]))
+        if not b.get("notePath"):
+            b["notePath"] = self.match_note(setup, b["title"])
         self.save_setup(setup)
+        self.sync_book_note(self.effective_history(), b)
         return b
+
+    # ----- book notes (same rules as Logic.kt / NoteText.kt) -----
+
+    STOP = {"a", "an", "the", "of", "and", "to", "for", "in"}
+    PIECES = [("mushroom", "mushrooms"), ("fung", "mushrooms"), ("wildflower", "wildflowers"), ("flower", "wildflowers"),
+              ("weed", "weeds"), ("tree", "trees"), ("bird", "birds"), ("mammal", "mammals"), ("rock", "rocks"),
+              ("mineral", "rocks"), ("frog", "frogs"), ("toad", "frogs"), ("salamander", "frogs"), ("snake", "snakes"), ("reptile", "snakes")]
+
+    @staticmethod
+    def title_key(title: str) -> str:
+        t = title.lower().split(" (")[0].split(":")[0]
+        return re.sub(r"[^a-z0-9]+", " ", t).strip()
+
+    def title_score(self, a: str, b: str) -> float:
+        x, y = self.title_key(a), self.title_key(b)
+        if not x or not y:
+            return 0.0
+        if x == y or x.startswith(y + " ") or y.startswith(x + " "):
+            return 1.0
+        wx = {w for w in x.split(" ") if w not in self.STOP}
+        wy = {w for w in y.split(" ") if w not in self.STOP}
+        if min(len(wx), len(wy)) >= 2 and (wx <= wy or wy <= wx):
+            return 0.9
+        return len(wx & wy) / max(1, len(wx | wy))
+
+    def piece_for(self, title: str) -> str:
+        t = title.lower()
+        return next((piece for word, piece in self.PIECES if word in t), "")
+
+    @staticmethod
+    def frontmatter(text: str) -> dict:
+        lines = text.replace("\r\n", "\n").split("\n")
+        if not lines or lines[0].strip() != "---":
+            return {}
+        out = {}
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            if line.startswith((" ", "-")) or ":" not in line:
+                continue
+            k, v = line.split(":", 1)
+            v = v.strip()
+            for q in ('"', "'"):
+                if len(v) >= 2 and v.startswith(q) and v.endswith(q):
+                    v = v[1:-1]
+            out[k.strip()] = v
+        return out
+
+    @staticmethod
+    def set_frontmatter(text: str, values: dict) -> str:
+        """Set keys to raw YAML values (None removes the key); every other line stays as it was."""
+        if not values:
+            return text
+        nl = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(nl)
+        has_front = bool(lines) and lines[0].strip() == "---" and any(x.strip() == "---" for x in lines[1:])
+        if not has_front:
+            added = [f"{k}: {v}" for k, v in values.items() if v is not None]
+            return nl.join(["---", *added, "---", *lines]) if added else text
+        remaining = dict(values)
+        i = 1
+        while i < len(lines) and lines[i].strip() != "---":
+            line = lines[i]
+            key = "" if line.startswith((" ", "-")) or ":" not in line else line.split(":", 1)[0].strip()
+            if key and key in remaining:
+                v = remaining.pop(key)
+                while i + 1 < len(lines) and lines[i + 1].strip() != "---" and lines[i + 1].startswith((" ", "-")):
+                    del lines[i + 1]
+                if v is None:
+                    del lines[i]
+                    continue
+                lines[i] = f"{key}: {v}"
+            i += 1
+        lines[i:i] = [f"{k}: {v}" for k, v in remaining.items() if v is not None]
+        return nl.join(lines)
+
+    @staticmethod
+    def last_read_on(history: dict, b: dict) -> str | None:
+        days = [d for d, rec in history.get("days", {}).items() if rec.get("pages", {}).get(b["id"], 0) > 0]
+        return max(days) if days else None
+
+    @staticmethod
+    def finished_on(history: dict, b: dict) -> str | None:
+        total = b.get("startPage", 0)
+        for day in sorted(history.get("days", {})):
+            total += history["days"][day].get("pages", {}).get(b["id"], 0)
+            if total >= b["pages"]:
+                return day
+        return None
+
+    def book_note_values(self, history: dict, b: dict, note: dict) -> dict:
+        page = self.book_page(history, b)
+        out = {"pagesRead": str(page)}
+        if (last := self.last_read_on(history, b)):
+            out["lastReadOn"] = last
+        if not note.get("pages"):
+            out["pages"] = str(b["pages"])
+        if b["pages"] > 0 and page >= b["pages"]:
+            out["read"] = "true"
+            if not note.get("finished"):
+                out["finished"] = self.finished_on(history, b) or history["currentDay"]
+        elif note.get("finished"):
+            out["read"] = "false"
+            out["finished"] = None
+        return out
+
+    def druid_book_notes(self, setup: dict) -> list[dict]:
+        folder = setup.get("settings", {}).get("booksFolder", "Books").strip("/") or "Books"
+        out = []
+        for f in sorted((self.vault / folder).glob("*.md")):
+            try:
+                front = self.frontmatter(f.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            if (front.get("subType") or front.get("subtype") or "").lower() == "druid book":
+                out.append({"path": f"{folder}/{f.name}", "title": front.get("title") or f.stem, "pages": int(front["pages"]) if str(front.get("pages", "")).isdigit() else 0})
+        return out
+
+    def match_note(self, setup: dict, title: str) -> str:
+        claimed = {b.get("notePath") for b in setup.get("books", [])}
+        notes = [n for n in self.druid_book_notes(setup) if n["path"] not in claimed]
+        best = max(notes, key=lambda n: self.title_score(title, n["title"]), default=None)
+        return best["path"] if best and self.title_score(title, best["title"]) >= 0.6 else ""
+
+    def sync_book_note(self, history: dict, b: dict) -> bool:
+        """Write progress into the book's note. A note that can't be read is never written."""
+        if not b.get("notePath"):
+            return False
+        path = self.vault / b["notePath"]
+        try:
+            before = path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        after = self.set_frontmatter(before, self.book_note_values(history, b, self.frontmatter(before)))
+        if after != before:
+            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+            tmp.write_text(after, encoding="utf-8")
+            os.replace(tmp, path)
+        return True
 
     # ----- reports -----
 
@@ -287,7 +437,8 @@ class Grove:
             lines += ["", "Books:"]
             for b in books:
                 page = self.book_page(history, b)
-                lines.append(f"- {b['id']} {b['title']}: {page}/{b['pages']}" + (" (finished)" if page >= b["pages"] else ""))
+                lines.append(f"- {b['id']} {b['title']}: {page}/{b['pages']}" + (" (finished)" if page >= b["pages"] else "")
+                             + (f", note: {b['notePath']}" if b.get("notePath") else ", no note linked"))
         lines += ["", "Tasks today:"]
         tasks = self.tasks_on(setup, d)
         if not tasks:

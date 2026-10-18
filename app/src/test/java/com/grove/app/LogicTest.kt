@@ -173,4 +173,65 @@ class LogicTest {
         assertTrue(first != second)
         assertTrue(first.drop(1).toInt() >= 27)
     }
+
+    // ----- book notes and "Add a line?" -----
+
+    @Test fun frontmatterEditsOnlyTouchGivenKeys() {
+        val text = "---\na: 1\nlist:\n  - x\nb: 2\n---\nbody\n"
+        assertEquals("---\nlist: 3\nb: 2\nc: 4\n---\nbody\n", NoteText.setFrontmatter(text, mapOf("list" to "3", "c" to "4", "a" to null)))
+        assertEquals(mapOf("a" to "1", "list" to "", "b" to "2"), NoteText.frontmatter(text))
+    }
+
+    @Test fun logLinesGoAtTheEndOfDailyLogOutsideGrovesBlock() {
+        val note = "---\n---\n## Daily Log\n${NoteText.START}\n### Grove\n- [x] Morning\n${NoteText.END}\n- my own line\n\n## Notes\nx\n"
+        val out = NoteText.appendLogLines(note, listOf("Nature: saw a heron", "SOP: steady"))
+        assertEquals("---\n---\n## Daily Log\n${NoteText.START}\n### Grove\n- [x] Morning\n${NoteText.END}\n- my own line\n- Nature: saw a heron\n- SOP: steady\n\n## Notes\nx\n", out)
+        assertTrue(NoteText.appendLogLines("# Day\n", listOf("Plant: leaves out")).endsWith("## Daily Log\n- Plant: leaves out\n"))
+    }
+
+    @Test fun booksLinkToDruidBookNotesByTitle() {
+        val d = migrated()
+        val notes = listOf(
+            Logic.BookNote("Books/Michigan Snakes.md", "Michigan Snakes: A Field Guide and Pocket Reference", 76),
+            Logic.BookNote("Books/Michigan Trees.md", "Michigan Trees, Revised and Updated: A Guide to the Trees", 456),
+            Logic.BookNote("Books/Lichens.md", "Lichens of the North Woods", 150),
+        )
+        val linked = Logic.linkBookNotes(d, notes)
+        assertEquals("Books/Michigan Snakes.md", linked.books.first { it.title.startsWith("Michigan Snakes") }.notePath)
+        assertEquals("Books/Michigan Trees.md", linked.books.first { it.title.startsWith("Michigan Trees") }.notePath)
+        val added = linked.books.last()
+        assertEquals("Lichens of the North Woods", added.title)
+        assertEquals(10, linked.books.size)
+        assertEquals(linked, Logic.linkBookNotes(linked, notes)) // nothing new the second time
+    }
+
+    @Test fun bookNoteGetsProgressAndReadWhenFinished() {
+        var d = Logic.linkBookNotes(migrated(), listOf(Logic.BookNote("Books/Michigan Snakes.md", "Michigan Snakes", 76)))
+        val snakes = d.books.first { it.notePath.isNotEmpty() }
+        d = Logic.logPages(d, snakes.id, 20)
+        assertEquals(mapOf("pagesRead" to "20", "lastReadOn" to "2026-10-19"), Logic.bookNoteValues(d, snakes, mapOf("pages" to "76", "read" to "false")))
+        d = Logic.logPages(d, snakes.id, 56)
+        val done = Logic.bookNoteValues(d, snakes, mapOf("pages" to "76", "read" to "false"))
+        assertEquals("true", done["read"])
+        assertEquals("2026-10-19", done["finished"])
+        d = Logic.logPages(d, snakes.id, -6)
+        val back = Logic.bookNoteValues(d, snakes, mapOf("pages" to "76", "read" to "true", "finished" to "2026-10-19"))
+        assertEquals("false", back["read"])
+        assertTrue(back.containsKey("finished") && back["finished"] == null)
+    }
+
+    @Test fun addALineIsOfferedOnceADay() {
+        var d = migrated()
+        assertEquals(null, Logic.pendingLine(d))
+        d = Logic.toggleTask(d, "t3", LocalDateTime.parse("2026-10-19T16:40"))
+        assertEquals("Nature", Logic.pendingLine(d)?.prefix)
+        d = Logic.addLine(d, "t3", "Nature: heron on the pond")
+        assertEquals(null, Logic.pendingLine(d))
+        assertEquals(listOf("Nature: heron on the pond"), d.today.lines)
+        d = d.copy(settings = d.settings.copy(linePromptOff = listOf("t9")))
+        d = Logic.toggleTask(d, "t9", LocalDateTime.parse("2026-10-19T16:45"))
+        assertEquals(null, Logic.pendingLine(d))
+        d = Logic.skipLine(d, Logic.READING)
+        assertTrue(!Logic.wantsLine(d, Logic.READING))
+    }
 }

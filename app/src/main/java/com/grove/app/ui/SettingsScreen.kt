@@ -81,6 +81,19 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                 OutlinedButton(onClick = { ObsidianSync.openInObsidian(context, data) }, modifier = Modifier.fillMaxWidth()) { Text("Open today's note in Obsidian") }
             }
 
+            SectionLabel("Add a line?", GroveColors.Green)
+            Text("After checking these off, Grove offers a quick line for today's note (under Daily Log). Turn off any you don't want asked about.",
+                fontSize = 12.sp, color = GroveColors.Muted)
+            Logic.lineItems(data).forEach { item ->
+                SwitchRow(item.label, "Writes \"- ${item.prefix}: …\"", item.key !in s.linePromptOff) { on ->
+                    saveSettings { st -> st.copy(linePromptOff = if (on) st.linePromptOff - item.key else (st.linePromptOff + item.key).distinct()) }
+                }
+            }
+            var booksFolder by remember { mutableStateOf(s.booksFolder) }
+            OutlinedTextField(booksFolder, { booksFolder = it; saveSettings { st -> st.copy(booksFolder = it) } },
+                label = { Text("Book notes folder") }, supportingText = { Text("Notes here with subType: Druid book appear on the Books screen and get your progress.") },
+                modifier = Modifier.fillMaxWidth())
+
             SectionLabel("Your day", GroveColors.Green)
             Text("A new day starts when you check off Morning practice, or at this hour if you haven't:", fontSize = 13.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

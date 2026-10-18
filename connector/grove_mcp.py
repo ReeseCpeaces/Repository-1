@@ -22,7 +22,10 @@ Habits have steps, optional reminder times, and streaks with one grace day (one 
 a streak, two in a row reset it). Weekly goals have no streak: "Write the book" counts sessions
 (one per day, target 3 a week) and "Field guides" counts pages read across the books, with a weekly
 target of pages left / weeks left until the deadline (weeks start Monday). Log them with
-grove_log_session and grove_log_pages. Tasks repeat on weekdays or monthly, or happen once on a date. Changes made
+grove_log_session and grove_log_pages.
+Each book can be linked to its note in the vault's Books folder (notePath); Grove writes pagesRead,
+lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
+in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. Changes made
 here reach the phone through Syncthing and apply when the Grove app next opens, so mention that
 after editing. Times are 24-hour HH:MM. Call grove_overview first to see ids and today's state."""
 
@@ -130,13 +133,15 @@ def grove_log_session(goal: str | None = None, day: str | None = None) -> str:
 
 @mcp.tool()
 def grove_add_book(title: str, pages: int, start_page: int = 0) -> str:
-    """Add a book to the reading goal. start_page: pages already read before tracking began."""
+    """Add a book to the reading goal. start_page: pages already read before tracking began.
+    Links its note in the vault's Books folder (subType: Druid book) when the title matches."""
     return _run(grove.set_book, title, pages, start_page)
 
 
 @mcp.tool()
 def grove_update_book(book_id: str, title: str | None = None, pages: int | None = None, start_page: int | None = None) -> str:
-    """Change a book's title, page count or starting page. Only the fields given are changed."""
+    """Change a book's title, page count or starting page. Only the fields given are changed.
+    Also updates the book's note in the vault (pagesRead, lastReadOn, read/finished)."""
     return _run(grove.set_book, title, pages, start_page, book_id)
 
 

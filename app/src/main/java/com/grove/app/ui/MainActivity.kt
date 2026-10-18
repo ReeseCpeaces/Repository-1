@@ -97,5 +97,7 @@ class MainActivity : ComponentActivity() {
             is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back)
             is Screen.Day -> DayScreen(data, s.date, ::go, ::back)
         }
+        // Not while editing, so it never covers a form.
+        if (stack.last().let { it is Screen.Today || it is Screen.Forest || it is Screen.HabitDetail || it is Screen.Day }) PendingLinePrompt(data)
     }
 }

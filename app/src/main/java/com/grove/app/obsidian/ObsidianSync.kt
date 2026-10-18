@@ -8,6 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.grove.app.data.AppData
 import com.grove.app.data.Logic
 import com.grove.app.data.Role
+import com.grove.app.data.Store
 import java.util.concurrent.Executors
 
 /**
@@ -22,7 +23,8 @@ object ObsidianSync {
     fun syncAsync(context: Context, old: AppData?, new: AppData) {
         if (new.settings.vaultUri.isEmpty()) return
         if (old != null && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits && old.tasks == new.tasks && old.goals == new.goals && old.books == new.books) return
-        worker.execute { runCatching { sync(context, new) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
+        // Read the latest data when the job runs, so queued jobs never write the same lines twice.
+        worker.execute { runCatching { sync(context, Store.get(context)) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
     }
 
     /** The properties Grove manages, with today's values. */
@@ -82,11 +84,27 @@ object ObsidianSync {
         val resolver = context.contentResolver
         // If the note can't be read, leave it alone rather than risk writing over it.
         val before = resolver.openInputStream(note.uri)?.use { it.readBytes().decodeToString() } ?: return
-        val after = NoteText.applySummary(NoteText.applyProperties(before, properties(data)), summary(data))
-        if (after != before) resolver.openOutputStream(note.uri, "wt")?.use { it.write(after.encodeToByteArray()) }
+        val rec = data.today
+        val pending = rec.lines.drop(rec.linesWritten)
+        val after = NoteText.appendLogLines(NoteText.applySummary(NoteText.applyProperties(before, properties(data)), summary(data)), pending)
+        if (after != before) resolver.openOutputStream(note.uri, "wt")?.use { it.write(after.encodeToByteArray()) } ?: return
+        if (pending.isNotEmpty()) Store.update(context) { Logic.markLinesWritten(it, data.currentDay, rec.lines.size) }
+        writeEarlierLines(context, root, data)
     }
 
-    private fun find(root: DocumentFile, rel: String): DocumentFile? =
+    /** Lines saved on an earlier day that couldn't be written then (say, the vault wasn't reachable). */
+    private fun writeEarlierLines(context: Context, root: DocumentFile, data: AppData) {
+        for ((day, rec) in data.days) {
+            if (day == data.currentDay || rec.lines.size <= rec.linesWritten) continue
+            val note = find(root, NoteText.path(data.settings.dailyNotePath, Logic.date(day))) ?: continue
+            val before = context.contentResolver.openInputStream(note.uri)?.use { it.readBytes().decodeToString() } ?: continue
+            val after = NoteText.appendLogLines(before, rec.lines.drop(rec.linesWritten))
+            context.contentResolver.openOutputStream(note.uri, "wt")?.use { it.write(after.encodeToByteArray()) } ?: continue
+            Store.update(context) { Logic.markLinesWritten(it, day, rec.lines.size) }
+        }
+    }
+
+    fun find(root: DocumentFile, rel: String): DocumentFile? =
         rel.split('/').filter { it.isNotEmpty() }.fold(root as DocumentFile?) { dir, part -> dir?.findFile(part) }
 
     private fun findOrCreate(context: Context, root: DocumentFile, rel: String, data: AppData, d: java.time.LocalDate): DocumentFile? {
@@ -105,9 +123,14 @@ object ObsidianSync {
     }
 
     /** Opens today's note in the Obsidian app. */
-    fun openInObsidian(context: Context, data: AppData) {
-        val rel = NoteText.path(data.settings.dailyNotePath, Logic.date(data.currentDay)).removeSuffix(".md")
-        val uri = Uri.parse("obsidian://open?file=" + Uri.encode(rel))
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    fun openInObsidian(context: Context, data: AppData) =
+        openNote(context, data, NoteText.path(data.settings.dailyNotePath, Logic.date(data.currentDay)))
+
+    /** Opens a note (path inside the vault) in the Obsidian app. */
+    fun openNote(context: Context, data: AppData, rel: String) {
+        val vault = data.settings.vaultUri.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { DocumentFile.fromTreeUri(context, Uri.parse(it))?.name }.getOrNull() } ?: "Obsidian"
+        val uri = Uri.parse("obsidian://open?vault=" + Uri.encode(vault) + "&file=" + Uri.encode(rel.removeSuffix(".md")))
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 }
