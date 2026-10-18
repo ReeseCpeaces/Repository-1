@@ -35,4 +35,4 @@ jobs:
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest grove.apk --target "$GITHUB_SHA" --prerelease \
-            --title "Grove (latest build)" --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Download grove.apk on your phone to install or update."
+            --title "Grove 0.1.${GITHUB_RUN_NUMBER} (latest build)" --notes "Version 0.1.${GITHUB_RUN_NUMBER}, built from ${GITHUB_SHA::7}. Download grove.apk on your phone to install or update. Your version is shown at the bottom of Grove's Settings."

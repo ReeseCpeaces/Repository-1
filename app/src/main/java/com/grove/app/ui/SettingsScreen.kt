@@ -109,7 +109,8 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                     context.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + context.packageName)))
                 }, modifier = Modifier.fillMaxWidth()) { Text("Allow exact-time alarms") }
             }
-            Text("Grove", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GroveColors.Muted)
+            val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?" }
+            Text("Grove $version", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GroveColors.Muted)
             Text("Art from SVG Repo (svgrepo.com).", fontSize = 12.sp, color = GroveColors.Muted)
             Spacer(Modifier.height(32.dp))
         }

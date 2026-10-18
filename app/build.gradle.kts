@@ -13,8 +13,10 @@ android {
         applicationId = "com.grove.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI numbers each build so the installed version can be told apart; local builds are 0.1.0.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 1 + build
+        versionName = "0.1.$build"
     }
 
     buildTypes {
