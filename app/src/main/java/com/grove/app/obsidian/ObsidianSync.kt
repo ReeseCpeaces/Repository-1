@@ -69,7 +69,8 @@ object ObsidianSync {
         val rel = NoteText.path(data.settings.dailyNotePath, d)
         val note = findOrCreate(context, root, rel, data, d) ?: return
         val resolver = context.contentResolver
-        val before = resolver.openInputStream(note.uri)?.use { it.readBytes().decodeToString() } ?: ""
+        // If the note can't be read, leave it alone rather than risk writing over it.
+        val before = resolver.openInputStream(note.uri)?.use { it.readBytes().decodeToString() } ?: return
         val after = NoteText.applySummary(NoteText.applyProperties(before, properties(data)), summary(data))
         if (after != before) resolver.openOutputStream(note.uri, "wt")?.use { it.write(after.encodeToByteArray()) }
     }
