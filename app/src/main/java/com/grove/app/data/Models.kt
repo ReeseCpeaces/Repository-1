@@ -52,8 +52,10 @@ data class Task(
     val reminders: List<String> = emptyList(),
     val nag: Boolean = true,
     val nagMinutes: Int = 30,
+    /** 1–31: repeats monthly on this day of the month (overrides [days] and [date]). 0 = not monthly. */
+    val monthDay: Int = 0,
 ) {
-    val repeating: Boolean get() = days.any { it }
+    val repeating: Boolean get() = monthDay > 0 || days.any { it }
 }
 
 @Serializable

@@ -101,4 +101,23 @@ class LogicTest {
         assertEquals("discursive meditation", setup.habits[0].steps[0].prop)
         assertEquals("2026-10-30", setup.tasks[0].date)
     }
+
+    @Test fun afterMidnightStillShowsYesterdaysTasks() {
+        // Saturday Oct 17; at 01:00 on Sunday with Morning practice not done, Grove's day is still Saturday.
+        val seed = Seed.data(LocalDate.of(2026, 10, 17))
+        val night = seed.copy(currentDay = Logic.rolledDay(seed, LocalDateTime.of(2026, 10, 18, 1, 0)))
+        assertEquals("2026-10-17", night.currentDay)
+        assertEquals(listOf("Plant study + nature time (1–2 hrs)"), Logic.tasksOn(night, Logic.groveToday(night)).map { it.name })
+    }
+
+    @Test fun monthlyTasksRepeatOnTheDayOfTheMonth() {
+        val taltz = com.grove.app.data.Task("t30", "Take Taltz", "Health", time = "14:00", monthDay = 13)
+        val endOfMonth = com.grove.app.data.Task("t31", "Pay rent", monthDay = 31)
+        val d = AppData(tasks = listOf(taltz, endOfMonth), currentDay = "2026-11-13")
+        assertEquals(listOf("Take Taltz"), Logic.tasksOn(d, LocalDate.of(2026, 11, 13)).map { it.name })
+        assertTrue(Logic.tasksOn(d, LocalDate.of(2026, 11, 14)).isEmpty())
+        assertEquals(listOf("Pay rent"), Logic.tasksOn(d, LocalDate.of(2027, 2, 28)).map { it.name })
+        assertEquals(listOf("Pay rent"), Logic.tasksOn(d, LocalDate.of(2026, 12, 31)).map { it.name })
+        assertTrue(Logic.tasksOn(d, LocalDate.of(2026, 12, 30)).isEmpty())
+    }
 }

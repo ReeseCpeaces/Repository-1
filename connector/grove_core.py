@@ -85,9 +85,15 @@ class Grove:
     def tasks_on(self, setup: dict, d: date) -> list[dict]:
         out = []
         wd = self.weekday_index(d)
+        last = (date(d.year + d.month // 12, d.month % 12 + 1, 1) - timedelta(days=1)).day
         for t in setup.get("tasks", []):
-            repeating = any(t.get("days", []))
-            on = (t["days"][wd] and (not t.get("firstOfMonth") or d.day <= 7)) if repeating else t.get("date") == d.isoformat()
+            if t.get("monthDay", 0) > 0:
+                # Monthly; in shorter months a 29th-31st falls on the last day (same as the app).
+                on = d.day == min(t["monthDay"], last)
+            elif any(t.get("days", [])):
+                on = t["days"][wd] and (not t.get("firstOfMonth") or d.day <= 7)
+            else:
+                on = t.get("date") == d.isoformat()
             if on:
                 out.append({"id": t["id"], "name": t["name"], "time": t.get("time", ""), "list": t.get("list", "")})
         for h in setup.get("holyDays", []):
@@ -249,18 +255,28 @@ class Grove:
         self.save_setup(setup)
         return f"Removed {kind} {item['name']}."
 
+    @staticmethod
+    def check_month_day(n: int | None) -> int | None:
+        if n is None:
+            return None
+        if not 0 <= int(n) <= 31:
+            raise GroveError(f"month_day must be 1-31 (or 0 to stop repeating monthly). Got {n!r}.")
+        return int(n)
+
     def add_task(self, name: str, time_due: str = "16:30", days: list[str] | None = None, date_due: str | None = None, list_name: str = "Inbox",
                  reminders: list[str] | None = None, nag: bool = True, nag_minutes: int = 30, first_of_month: bool = False,
-                 prop: str = "", high: bool = False) -> dict:
+                 prop: str = "", high: bool = False, month_day: int | None = None) -> dict:
         setup = self.load_setup()
-        flags = self.parse_days(days, [False] * 7)
-        if not any(flags) and not date_due:
-            raise GroveError("A one-time task needs date_due (YYYY-MM-DD); a repeating task needs days.")
+        md = self.check_month_day(month_day) or 0
+        flags = [False] * 7 if md else self.parse_days(days, [False] * 7)
+        if not md and not any(flags) and not date_due:
+            raise GroveError("A one-time task needs date_due (YYYY-MM-DD); a weekly task needs days; a monthly task needs month_day.")
         t = {
             "id": self.new_id("t", setup["tasks"]), "name": name.strip(), "list": list_name, "days": flags,
-            "date": "" if any(flags) else self.check_date(date_due), "time": self.check_times([time_due])[0],
+            "date": "" if (md or any(flags)) else self.check_date(date_due), "time": self.check_times([time_due])[0],
             "firstOfMonth": first_of_month and any(flags), "prop": prop, "high": high,
             "reminders": self.check_times(reminders) if reminders is not None else [time_due], "nag": nag, "nagMinutes": nag_minutes,
+            "monthDay": md,
         }
         setup["tasks"].append(t)
         self.save_setup(setup)
@@ -278,9 +294,16 @@ class Grove:
                 t["days"] = self.parse_days(v, t["days"])
                 if any(t["days"]):
                     t["date"] = ""
+                    t["monthDay"] = 0
             elif k == "date_due":
                 t["date"] = self.check_date(v)
                 t["days"] = [False] * 7
+                t["monthDay"] = 0
+            elif k == "month_day":
+                t["monthDay"] = self.check_month_day(v)
+                if t["monthDay"]:
+                    t["days"] = [False] * 7
+                    t["date"] = ""
             elif k == "time_due":
                 t["time"] = self.check_times([v])[0]
             elif k == "reminders":

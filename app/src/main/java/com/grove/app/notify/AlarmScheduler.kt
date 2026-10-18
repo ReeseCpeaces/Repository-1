@@ -42,24 +42,29 @@ object AlarmScheduler {
         val today = now.toLocalDate()
         val codes = mutableSetOf<Int>()
 
-        fun schedule(kind: String, id: String, times: List<String>) {
+        // Each reminder fires at its time on the date the item is due. Both Grove's day (which can
+        // still be yesterday after midnight) and the calendar day are covered, so nothing due today
+        // is missed and yesterday's items never alarm on the wrong date.
+        fun schedule(kind: String, id: String, date: LocalDate, times: List<String>) {
             for (t in times) {
                 val (h, m) = t.split(":").map { it.toInt() }
-                val at = today.atTime(h, m)
+                val at = date.atTime(h, m)
                 if (!at.isAfter(now)) continue
-                val code = "rem|$kind|$id|$t".hashCode()
+                val code = "rem|$kind|$id|$date|$t".hashCode()
                 codes += code
                 setExact(context, at, fireIntent(context, code, kind, id))
             }
         }
 
-        val day = Logic.date(data.currentDay)
-        for (h in data.habits) {
-            if (Logic.scheduledOn(h, day) && !Logic.isDoneToday(data, h)) schedule(ReminderReceiver.KIND_HABIT, h.id, h.reminders)
-        }
-        for (t in Logic.tasksOn(data, today)) {
-            val task = t.task ?: continue
-            if (!Logic.isTaskDone(data, data.currentDay, t.id)) schedule(ReminderReceiver.KIND_TASK, t.id, task.reminders)
+        for (date in linkedSetOf(Logic.groveToday(data), today)) {
+            val key = Logic.key(date)
+            for (h in data.habits) {
+                if (Logic.scheduledOn(h, date) && !Logic.isDone(data, key, h)) schedule(ReminderReceiver.KIND_HABIT, h.id, date, h.reminders)
+            }
+            for (t in Logic.tasksOn(data, date)) {
+                val task = t.task ?: continue
+                if (!Logic.isTaskDone(data, key, t.id)) schedule(ReminderReceiver.KIND_TASK, t.id, date, task.reminders)
+            }
         }
 
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -77,7 +82,7 @@ object AlarmScheduler {
     /** Wake at the cutoff hour and just after midnight to roll the day and plan new reminders. */
     private fun scheduleDayTicks(context: Context, data: AppData, now: LocalDateTime) {
         val cutoff = now.toLocalDate().atTime(data.settings.cutoffHour, 0).let { if (it.isAfter(now)) it else it.plusDays(1) }
-        val midnight = LocalDate.now().plusDays(1).atTime(0, 1)
+        val midnight = now.toLocalDate().plusDays(1).atTime(0, 1)
         for ((code, at) in listOf(9001 to cutoff, 9002 to midnight)) {
             val i = Intent(context, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_DAY_TICK)
             setExact(context, at, PendingIntent.getBroadcast(context, code, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))

@@ -53,7 +53,7 @@ import java.time.LocalDateTime
 fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> Unit) {
     val context = LocalContext.current
     var date by remember(dateKey) { mutableStateOf(LocalDate.parse(dateKey)) }
-    val today = LocalDate.now()
+    val today = Logic.groveToday(data)
     val isToday = date == today
     val tasks = Logic.tasksOn(data, date)
     val byHour = tasks.groupBy { it.time.substringBefore(':').toInt() }
@@ -150,7 +150,7 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
 @Composable
 fun WeekStrip(data: AppData, selected: LocalDate, onPick: (LocalDate) -> Unit) {
     val start = selected.minusDays((selected.dayOfWeek.value % 7).toLong())
-    val today = LocalDate.now()
+    val today = Logic.groveToday(data)
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
         for (i in 0 until 7) {
             val d = start.plusDays(i.toLong())

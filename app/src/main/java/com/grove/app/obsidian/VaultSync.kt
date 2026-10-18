@@ -169,7 +169,8 @@ object VaultSync {
         notification), `role` ("morning" starts the day, "bedtime" ends it, else ""), `created` (date added; use today).
 
         Task fields: `id`, `name`, `list`, `days` (all false = one-time task on `date`), `date`, `time` (due time),
-        `firstOfMonth` (only the first matching weekday of the month), `prop`, `high` (high priority),
+        `firstOfMonth` (only the first matching weekday of the month), `monthDay` (1–31 = repeats monthly on that
+        day of the month, 0 = not monthly; overrides `days` and `date`), `prop`, `high` (high priority),
         `reminders`, `nag`, `nagMinutes`.
 
         Holy day fields: `id`, `name`, `date`, `detail`.

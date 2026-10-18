@@ -16,6 +16,12 @@ object Logic {
     /** Sunday-first index used by the weekday flags. */
     fun weekdayIndex(d: LocalDate): Int = d.dayOfWeek.value % 7
 
+    /**
+     * Grove's "today". It lags the calendar after midnight until Morning practice or the cutoff hour,
+     * so screens, widgets and reminders must use this, not LocalDate.now().
+     */
+    fun groveToday(data: AppData): LocalDate = date(data.currentDay)
+
     fun clock(t: LocalDateTime): String = TIME_FMT.format(t)
 
     fun fmtTime(hhmm: String): String {
@@ -112,7 +118,12 @@ object Logic {
         val out = mutableListOf<DueTask>()
         val wd = weekdayIndex(d)
         for (t in data.tasks) {
-            val on = if (t.repeating) t.days[wd] && (!t.firstOfMonth || d.dayOfMonth <= 7) else t.date == key(d)
+            val on = when {
+                // Monthly on a day of the month; in shorter months a 29th–31st falls on the last day.
+                t.monthDay > 0 -> d.dayOfMonth == minOf(t.monthDay, d.lengthOfMonth())
+                t.days.any { it } -> t.days[wd] && (!t.firstOfMonth || d.dayOfMonth <= 7)
+                else -> t.date == key(d)
+            }
             if (on) out += DueTask(t.id, t.name, t.time, t.list, t)
         }
         for (h in data.holyDays) {

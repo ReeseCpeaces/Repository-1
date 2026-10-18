@@ -6,7 +6,6 @@ import android.content.Intent
 import com.grove.app.data.Effects
 import com.grove.app.data.Logic
 import com.grove.app.data.Store
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 /** Handles alarms, notification buttons and system events (boot, time change, app update). */
@@ -79,8 +78,7 @@ class ReminderReceiver : BroadcastReceiver() {
             Notifier.showReminder(context, kind, id, h.name, text, snooze)
             if (h.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, h.nagMinutes)
         } else {
-            val t = Logic.tasksOn(data, LocalDate.now()).firstOrNull { it.id == id }?.task
-                ?: data.tasks.firstOrNull { it.id == id } ?: return
+            val t = data.tasks.firstOrNull { it.id == id } ?: return
             if (Logic.isTaskDone(data, data.currentDay, id)) return
             Notifier.showReminder(context, kind, id, t.name, "Due ${Logic.fmtTime(t.time)} · ${t.list}", snooze)
             if (t.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, t.nagMinutes)

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -43,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grove.app.data.AppData
@@ -118,7 +120,7 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
     var name by remember { mutableStateOf(old?.name.orEmpty()) }
     var list by remember { mutableStateOf(old?.list ?: "Inbox") }
     val days = remember { mutableStateListOf<Boolean>().apply { addAll(old?.days ?: List(7) { false }) } }
-    var date by remember { mutableStateOf(old?.date?.ifEmpty { null } ?: date0 ?: LocalDate.now().toString()) }
+    var date by remember { mutableStateOf(old?.date?.ifEmpty { null } ?: date0 ?: data.currentDay) }
     var time by remember { mutableStateOf(old?.time ?: time0 ?: "16:30") }
     var firstOfMonth by remember { mutableStateOf(old?.firstOfMonth ?: false) }
     var prop by remember { mutableStateOf(old?.prop.orEmpty()) }
@@ -126,12 +128,17 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
     val reminders = remember { mutableStateListOf<String>().apply { addAll(old?.reminders ?: listOf(time0 ?: "16:30")) } }
     var nag by remember { mutableStateOf(old?.nag ?: true) }
     var nagMinutes by remember { mutableStateOf(old?.nagMinutes ?: 30) }
+    var repeat by remember { mutableStateOf(when { (old?.monthDay ?: 0) > 0 -> "monthly"; old?.days?.any { it } == true -> "weekly"; else -> "once" }) }
+    var monthDay by remember { mutableStateOf((old?.monthDay?.takeIf { it > 0 } ?: LocalDate.parse(date).dayOfMonth).toString()) }
 
     fun save() {
         if (name.isBlank()) return
+        val weekly = repeat == "weekly" && days.any { it }
+        val md = if (repeat == "monthly") monthDay.toIntOrNull()?.coerceIn(1, 31) ?: return else 0
         val t = (old ?: Task(newId("t"), name)).copy(
-            name = name.trim(), list = list.trim().ifEmpty { "Inbox" }, days = days.toList(), date = if (days.any { it }) "" else date,
-            time = time, firstOfMonth = firstOfMonth && days.any { it }, prop = prop.trim(), high = high,
+            name = name.trim(), list = list.trim().ifEmpty { "Inbox" },
+            days = if (weekly) days.toList() else List(7) { false }, date = if (repeat == "once" || (repeat == "weekly" && !weekly)) date else "",
+            monthDay = md, time = time, firstOfMonth = firstOfMonth && weekly, prop = prop.trim(), high = high,
             reminders = reminders.sorted(), nag = nag, nagMinutes = nagMinutes,
         )
         Store.update(context) { d -> d.copy(tasks = if (old == null) d.tasks + t else d.tasks.map { if (it.id == t.id) t else it }) }
@@ -143,11 +150,19 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
     }) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(list, { list = it }, label = { Text("List (Home, Druid Path…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        DayPicker("Repeats on (leave empty for a one-time task)", days)
-        if (days.any { it }) {
-            SwitchRow("Only the first one of the month", "e.g. first Sunday", firstOfMonth) { firstOfMonth = it }
-        } else {
-            OutlinedButton(onClick = {
+        RepeatPicker(repeat) { repeat = it }
+        when (repeat) {
+            "weekly" -> {
+                DayPicker("Repeats on", days)
+                SwitchRow("Only the first one of the month", "e.g. first Sunday", firstOfMonth) { firstOfMonth = it }
+            }
+            "monthly" -> OutlinedTextField(
+                monthDay, { v -> monthDay = v.filter { it.isDigit() }.take(2) },
+                label = { Text("Monthly on day") },
+                supportingText = { Text("1–31. In shorter months a 29th–31st falls on the month's last day.") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            else -> OutlinedButton(onClick = {
                 val d = LocalDate.parse(date)
                 DatePickerDialog(context, { _, y, m, dd -> date = LocalDate.of(y, m + 1, dd).toString() }, d.year, d.monthValue - 1, d.dayOfMonth).show()
             }, modifier = Modifier.fillMaxWidth()) { Text("Date: $date") }
@@ -175,6 +190,17 @@ private fun Form(title: String, back: () -> Unit, save: () -> Unit, onDelete: ((
                 }
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RepeatPicker(repeat: String, onPick: (String) -> Unit) {
+    Text("Repeat", fontWeight = FontWeight.SemiBold)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("once" to "One time", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (key, label) ->
+            FilterChip(selected = repeat == key, onClick = { onPick(key) }, label = { Text(label) })
         }
     }
 }

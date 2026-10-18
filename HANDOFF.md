@@ -89,7 +89,8 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 ## Rules that matter
 
 - Habit/task `id`s are the keys for streak history: never change or reuse them.
-- Weekday arrays are Sunday-first. Times are `HH:mm` 24-hour; dates `yyyy-MM-dd`.
+- Weekday arrays are Sunday-first. Times are `HH:mm` 24-hour; dates `yyyy-MM-dd`. Tasks repeat weekly (`days`), monthly (`monthDay` 1–31) or once (`date`).
+- "Today" in the app is Grove's day (`Logic.groveToday(data)`, which lags the calendar after midnight), never `LocalDate.now()`.
 - Habits with `role` `"morning"` / `"bedtime"` drive the day rollover and forest time of day.
 - Grove owns those 8 note properties; ticking them by hand in Obsidian gets reverted.
 - If streak or day rules change, change `Logic.kt` and `connector/grove_core.py` together.

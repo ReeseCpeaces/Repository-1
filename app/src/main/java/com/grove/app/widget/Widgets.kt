@@ -144,7 +144,7 @@ class TodayWidget : GlanceAppWidget() {
         Store.refreshDay(context)
         provideContent {
             val prefs = currentState<Preferences>()
-            val today = LocalDate.now()
+            val today = Logic.groveToday(Store.get(context))
             val selected = prefs[Widgets.SELECTED]?.let { LocalDate.parse(it) }?.takeIf { !it.isBefore(today) } ?: today
             Content(Store.get(context), today, selected, prefs[Widgets.MONTH] ?: 0)
         }
@@ -285,7 +285,7 @@ class HolyDaysWidget : GlanceAppWidget() {
 
     @Composable
     private fun Content(data: AppData) {
-        val upcoming = Logic.upcomingHolyDays(data, LocalDate.now())
+        val upcoming = Logic.upcomingHolyDays(data, Logic.groveToday(data))
         Column(GlanceModifier.fillMaxSize().background(BG).cornerRadius(24.dp).padding(12.dp)) {
             Text("Wheel of the Year", style = style(TEXT, 15, bold = true))
             Spacer(GlanceModifier.height(4.dp))

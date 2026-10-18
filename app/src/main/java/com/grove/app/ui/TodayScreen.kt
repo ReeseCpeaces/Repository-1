@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import com.grove.app.data.AppData
 import com.grove.app.data.Logic
 import com.grove.app.data.Store
-import java.time.LocalDate
 import java.time.LocalDateTime
 
 private val WEEKDAYS = listOf("Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays")
@@ -47,7 +46,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
     val context = LocalContext.current
     val day = Logic.date(data.currentDay)
     val habits = data.habits.filter { Logic.scheduledOn(it, day) }
-    val tasks = Logic.tasksOn(data, LocalDate.now())
+    val tasks = Logic.tasksOn(data, day)
     var menu by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -61,7 +60,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                 }
                 Tabs(forest = false, onToday = {}, onForest = { tab(Screen.Forest) })
                 // Tap a day to open its hour-by-hour view.
-                WeekStrip(data, LocalDate.now()) { go(Screen.Day(it.toString())) }
+                WeekStrip(data, day) { go(Screen.Day(it.toString())) }
             }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -109,7 +108,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     SectionLabel("Wheel of the Year", GroveColors.Muted)
-                    Logic.upcomingHolyDays(data, LocalDate.now()).take(3).forEach { (h, n) ->
+                    Logic.upcomingHolyDays(data, day).take(3).forEach { (h, n) ->
                         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(h.name, fontWeight = FontWeight.SemiBold)
@@ -123,6 +122,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             }
             items(data.tasks, key = { "a" + it.id }) { t ->
                 val whenText = when {
+                    t.monthDay > 0 -> "Monthly on the ${ordinal(t.monthDay)}"
                     t.firstOfMonth -> "First ${WEEKDAYS[t.days.indexOf(true)].removeSuffix("s")} of the month"
                     t.repeating -> t.days.mapIndexedNotNull { i, on -> if (on) WEEKDAYS[i] else null }.joinToString(", ")
                     else -> t.date
@@ -155,4 +155,12 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             }
         }
     }
+}
+
+fun ordinal(n: Int): String = n.toString() + when {
+    n % 100 in 11..13 -> "th"
+    n % 10 == 1 -> "st"
+    n % 10 == 2 -> "nd"
+    n % 10 == 3 -> "rd"
+    else -> "th"
 }
