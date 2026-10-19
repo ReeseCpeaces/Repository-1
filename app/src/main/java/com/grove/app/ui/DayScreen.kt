@@ -55,11 +55,15 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
     var date by remember(dateKey) { mutableStateOf(LocalDate.parse(dateKey)) }
     val today = Logic.groveToday(data)
     val isToday = date == today
+    val dayKey = date.toString()
+    // Today and any earlier day can be checked off; the future is just a plan.
+    val markable = !date.isAfter(today)
     val tasks = Logic.tasksOn(data, date)
     val byHour = tasks.groupBy { it.time.substringBefore(':').toInt() }
     val firstHour = minOf(8, byHour.keys.minOrNull() ?: 8)
     val hours = (firstHour..23).toList()
-    val habits = if (isToday) data.habits.filter { Logic.scheduledOn(it, Logic.date(data.currentDay)) } else emptyList()
+    val habits = if (!markable) emptyList()
+        else data.habits.filter { Logic.scheduledOn(it, date) || Logic.isDone(data, dayKey, it) }
     val holy = data.holyDays.firstOrNull { it.date == date.toString() }
     val list = rememberLazyListState()
     LaunchedEffect(date) { list.scrollToItem(0) }
@@ -71,7 +75,7 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
                     IconButton(onClick = back) { Icon(Icons.Filled.ArrowBack, "Back") }
                     Column(Modifier.weight(1f)) {
                         Text(
-                            if (isToday) "Today" else if (date == today.plusDays(1)) "Tomorrow" else Logic.weekdayName(date),
+                            if (isToday) "Today" else if (date == today.plusDays(1)) "Tomorrow" else if (date == today.minusDays(1)) "Yesterday" else Logic.weekdayName(date),
                             fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, fontSize = 24.sp,
                         )
                         Text("${Logic.weekdayName(date)}, ${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}, ${date.year}",
@@ -91,12 +95,12 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
                 }
             }
             if (habits.isNotEmpty()) {
-                item { Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel("Habits (any time today)", GroveColors.Green) } }
+                item { Column(Modifier.padding(horizontal = 16.dp)) { SectionLabel(if (isToday) "Habits (any time today)" else "Habits · tap to mark or undo", GroveColors.Green) } }
                 items(habits, key = { "h" + it.id }) { h ->
-                    val done = Logic.isDoneToday(data, h)
+                    val done = Logic.isDone(data, dayKey, h)
                     Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         CheckMark(done, (if (done) "Uncheck " else "Check off ") + h.name, square = false, onToggle = {
-                            Store.update(context) { Logic.toggleHabit(it, h.id, LocalDateTime.now()) }
+                            Store.update(context) { Logic.toggleHabit(it, h.id, LocalDateTime.now(), dayKey) }
                         })
                         ItemTitle(h.name, done, Modifier.weight(1f).clickable { go(Screen.HabitDetail(h.id)) }, size = 15)
                     }
@@ -112,15 +116,15 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
                     Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(GroveColors.Line))
                         byHour[hour].orEmpty().forEach { t ->
-                            val done = isToday && Logic.isTaskDone(data, data.currentDay, t.id)
+                            val done = markable && Logic.isTaskDone(data, dayKey, t.id)
                             Row(
                                 Modifier.padding(top = 4.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(GroveColors.Surface)
                                     .clickable(enabled = t.task != null) { go(Screen.EditTask(t.id)) },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (isToday) {
+                                if (markable) {
                                     CheckMark(done, (if (done) "Uncheck " else "Check off ") + t.name, square = true, onToggle = {
-                                        Store.update(context) { Logic.toggleTask(it, t.id, LocalDateTime.now()) }
+                                        Store.update(context) { Logic.toggleTask(it, t.id, LocalDateTime.now(), dayKey) }
                                     }, size = 24)
                                 } else {
                                     Box(Modifier.width(14.dp))

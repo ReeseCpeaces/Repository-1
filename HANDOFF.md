@@ -66,6 +66,13 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
   backup cutoff hour (default 2 PM). So Before-bed practice at 3 AM counts for the previous day.
+- **Marking earlier days:** any day up to Grove's today can be checked off or undone later
+  (`Logic.toggleHabit/toggleStep/toggleTask(..., day)`; future days are refused by `Logic.canMark`).
+  Today shows a "Yesterday · not checked off" section; the habit page's 7-day strip is tappable; the Day
+  view (arrows go back indefinitely) has checkable habits and tasks for past days. No time is recorded
+  for past days. Marking a day before a habit's `created` moves `created` back. The note for that day is
+  updated too (only if it exists). The connector's `grove_mark_done(item, day, done)` does the same
+  through the inbox (`type` "habit"/"task", `item`, `done`).
 - **Reminders:** exact alarms, Done / Snooze N min / "Snooze…" picker (5 min–2 h); repeats until done.
 - **Pinned notification:** today's habits with a check-off button for the next one; reposts if swiped.
 - **Widgets (Glance):** calendar + today (dots on days with tasks, month arrows, tap a day to see its

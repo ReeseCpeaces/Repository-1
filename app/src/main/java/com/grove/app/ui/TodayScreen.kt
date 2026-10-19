@@ -23,6 +23,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,32 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                         Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 4.dp)) {
                             Text("$streak", fontWeight = FontWeight.Bold, color = GroveColors.Green)
                             Text(if (streak == 1) "day" else "days", fontSize = 10.sp, color = GroveColors.Muted)
+                        }
+                    }
+                }
+            }
+            // Forgot to check something off before the day rolled over? Mark it here.
+            val yesterday = day.minusDays(1).toString()
+            val missed = Logic.missedOn(data, yesterday)
+            if (missed.isNotEmpty()) {
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { SectionLabel("Yesterday · not checked off", GroveColors.Muted) }
+                            TextButton(onClick = { go(Screen.Day(yesterday)) }) { Text("Earlier days", fontSize = 13.sp) }
+                        }
+                    }
+                }
+                items(missed, key = { "y" + it.id }) { h ->
+                    Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CheckMark(false, "Mark ${h.name} done yesterday", square = false, onToggle = {
+                                Store.update(context) { Logic.toggleHabit(it, h.id, LocalDateTime.now(), yesterday) }
+                            })
+                            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                                ItemTitle(h.name, false)
+                                Text("Did it but forgot to tap? Check it off for yesterday.", fontSize = 12.sp, color = GroveColors.Muted)
+                            }
                         }
                     }
                 }

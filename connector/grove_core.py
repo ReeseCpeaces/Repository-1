@@ -129,7 +129,9 @@ class Grove:
     def effective_history(self) -> dict:
         """history.json plus pending inbox logs, so progress shows right away."""
         history = self.load_history()
-        days = {k: {**v, "pages": dict(v.get("pages", {})), "sessions": list(v.get("sessions", []))} for k, v in history.get("days", {}).items()}
+        days = {k: {**v, "steps": dict(v.get("steps", {})), "tasks": dict(v.get("tasks", {})), "pages": dict(v.get("pages", {})),
+                    "sessions": list(v.get("sessions", []))} for k, v in history.get("days", {}).items()}
+        habits = {h["id"]: h for h in (self.load_setup().get("habits", []) if self.setup_path.exists() else [])}
         for e in self.pending_inbox(history):
             rec = days.setdefault(e.get("day") or history["currentDay"], {"steps": {}, "tasks": {}, "pages": {}, "sessions": []})
             rec.setdefault("pages", {})
@@ -138,6 +140,14 @@ class Grove:
                 rec["pages"][e["book"]] = max(0, rec["pages"].get(e["book"], 0) + e.get("pages", 0))
             elif e.get("type") == "session" and e.get("goal") not in rec["sessions"]:
                 rec["sessions"].append(e["goal"])
+            elif e.get("type") == "habit" and e.get("item") in habits:
+                rec.setdefault("steps", {})[e["item"]] = list(range(len(habits[e["item"]]["steps"]))) if e.get("done", True) else []
+            elif e.get("type") == "task":
+                rec.setdefault("tasks", {})
+                if e.get("done", True):
+                    rec["tasks"].setdefault(e["item"], "")
+                else:
+                    rec["tasks"].pop(e.get("item"), None)
         return {**history, "days": days}
 
     @staticmethod
@@ -227,6 +237,25 @@ class Grove:
         if goal:
             done, target = self.progress(setup, eff, goal, date.fromisoformat(eff["currentDay"]))
             msg += f" This week: {done} / {target} pages."
+        return msg + " It reaches the phone when Syncthing syncs and Grove opens."
+
+    def mark_done(self, item: str, day: str | None = None, done: bool = True) -> str:
+        """Check a habit or task off (or undo it) on today or any earlier day."""
+        setup, history = self.load_setup(), self.load_history()
+        everything = [("habit", h) for h in setup.get("habits", [])] + [("task", t) for t in setup.get("tasks", [])]
+        found = [x for x in everything if x[1]["id"] == item] or [x for x in everything if item.lower() in x[1]["name"].lower()]
+        if len(found) != 1:
+            names = ", ".join(f"{x[1]['id']} {x[1]['name']}" for x in everything)
+            raise GroveError(f"Couldn't tell which habit or task {item!r} means. Use an id: {names}")
+        kind, x = found[0]
+        day = self.check_date(day) or history["currentDay"]
+        if date.fromisoformat(day) > date.fromisoformat(history["currentDay"]):
+            raise GroveError(f"{day} is after Grove's today ({history['currentDay']}); only today or earlier days can be marked.")
+        self._write_inbox({"id": self.inbox_id(), "type": kind, "day": day, "item": x["id"], "done": done})
+        eff = self.effective_history()
+        msg = f"Marked {x['name']} {'done' if done else 'not done'} on {day}."
+        if kind == "habit":
+            msg += f" Streak now {self.streak(eff, x)}."
         return msg + " It reaches the phone when Syncthing syncs and Grove opens."
 
     def log_session(self, goal: str | None = None, day: str | None = None) -> str:

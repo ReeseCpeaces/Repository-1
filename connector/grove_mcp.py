@@ -119,6 +119,13 @@ def grove_remove_task(task_id: str) -> str:
 
 
 @mcp.tool()
+def grove_mark_done(item: str, day: str | None = None, done: bool = True) -> str:
+    """Check off a habit or task on today or any earlier day (e.g. a forgotten Before-bed practice), or undo it with done=false.
+    item: a habit/task id (e.g. "h2") or a unique part of its name. day: YYYY-MM-DD, default Grove's today."""
+    return _run(grove.mark_done, item, day, done)
+
+
+@mcp.tool()
 def grove_log_pages(book: str, pages: int, day: str | None = None) -> str:
     """Log field-guide pages read. book: a book id (e.g. "b30") or a unique part of its title (e.g. "Mushrooms").
     pages: pages read (negative to correct a mistake). day: YYYY-MM-DD, default today's Grove day."""

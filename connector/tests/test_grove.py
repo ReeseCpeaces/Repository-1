@@ -231,6 +231,19 @@ def test_conflict_copies_deleted_notes_and_unknown_pages():
     assert not (books / "Mushrooms of the Upper Midwest.md").exists()
 
 
+def test_mark_done_on_an_earlier_day():
+    g = Grove(make_vault())  # Read (h2) done 10, 11, 13, 14; today 15
+    assert "Streak now 5" in g.mark_done("h2", "2026-10-12")
+    assert "Marked Trash done on 2026-10-15" in g.mark_done("Trash")
+    assert "[x] 18:00 Trash" in g.overview()
+    assert "Streak now 4" in g.mark_done("Read", "2026-10-12", done=False)
+    try:
+        g.mark_done("h2", "2026-10-16")
+        raise AssertionError("expected GroveError")
+    except GroveError:
+        pass
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

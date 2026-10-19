@@ -2,6 +2,7 @@ package com.grove.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,8 +74,9 @@ fun HabitScreen(data: AppData, id: String, go: (Screen) -> Unit, back: () -> Uni
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(if (status.second) GroveColors.WarnBg else GroveColors.Surface).padding(12.dp),
             )
-            WeekStrip(data, h)
-            Text("Miss one day and the streak pauses. Miss two in a row and it resets.", fontSize = 12.sp, color = GroveColors.Muted)
+            WeekStrip(data, h) { day -> Store.update(context) { Logic.toggleHabit(it, h.id, LocalDateTime.now(), day) } }
+            Text("Tap a day to mark it done or undo it (older days: Day view from Today). Miss one day and the streak pauses; miss two in a row and it resets.",
+                fontSize = 12.sp, color = GroveColors.Muted)
 
             SectionLabel("Today's steps", GroveColors.Green)
             h.steps.forEachIndexed { i, s ->
@@ -118,9 +120,9 @@ private fun Stat(value: String, label: String, color: androidx.compose.ui.graphi
     }
 }
 
-/** The past six days plus today: filled = done, dashed = missed, ring = today. */
+/** The past six days plus today: filled = done, dashed = missed, ring = today. Tap a day to toggle it. */
 @Composable
-private fun WeekStrip(data: AppData, h: com.grove.app.data.Habit) {
+private fun WeekStrip(data: AppData, h: com.grove.app.data.Habit, onToggle: (String) -> Unit) {
     val today = Logic.date(data.currentDay)
     val created = Logic.date(h.created)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -130,7 +132,7 @@ private fun WeekStrip(data: AppData, h: com.grove.app.data.Habit) {
             val before = d.isBefore(created) || !Logic.scheduledOn(h, d)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("SMTWTFS"[Logic.weekdayIndex(d)].toString(), fontSize = 11.sp, color = GroveColors.Muted)
-                val mod = Modifier.size(36.dp).clip(CircleShape)
+                val mod = Modifier.size(36.dp).clip(CircleShape).clickable { onToggle(d.toString()) }
                 Box(
                     when {
                         done -> mod.background(GroveColors.Green)

@@ -150,39 +150,72 @@ object Logic {
     fun withDay(data: AppData, day: String, f: (DayRecord) -> DayRecord): AppData =
         data.copy(days = data.days + (day to f(data.days[day] ?: DayRecord())))
 
-    fun toggleHabit(data: AppData, habitId: String, now: LocalDateTime): AppData {
+    /** A past day or today can be marked; the future can't. */
+    fun canMark(data: AppData, day: String): Boolean = !date(day).isAfter(date(data.currentDay))
+
+    /**
+     * Check a habit off (or undo it) on [day]: today by default, or any earlier day, so a forgotten
+     * check-in can be filled in later. Times are only recorded for today.
+     */
+    fun toggleHabit(data: AppData, habitId: String, now: LocalDateTime, day: String = data.currentDay): AppData {
         val h = data.habits.firstOrNull { it.id == habitId } ?: return data
-        // Checking off the morning habit after a calendar rollover starts the new day.
+        if (!canMark(data, day)) return data
         var d = data
-        if (h.role == Role.MORNING && !isDoneToday(d, h)) {
+        var target = day
+        // Checking off the morning habit after a calendar rollover starts the new day.
+        if (day == data.currentDay && h.role == Role.MORNING && !isDoneToday(d, h)) {
             val today = key(now.toLocalDate())
-            if (date(today).isAfter(date(d.currentDay))) d = d.copy(currentDay = today)
+            if (date(today).isAfter(date(d.currentDay))) { d = d.copy(currentDay = today); target = today }
         }
-        val done = isDone(d, d.currentDay, h)
-        return withDay(d, d.currentDay) { r ->
+        val done = isDone(d, target, h)
+        val live = target == d.currentDay
+        // Marking a day before the habit was added moves its start back, so the streak counts it.
+        if (!done && date(target).isBefore(date(h.created))) d = d.copy(habits = d.habits.map { if (it.id == h.id) it.copy(created = target) else it })
+        return withDay(d, target) { r ->
             val steps = if (done) emptyList() else h.steps.indices.toList()
-            val times = if (done) r.habitTimes - h.id else r.habitTimes + (h.id to clock(now))
+            val times = if (done || !live) r.habitTimes - h.id else r.habitTimes + (h.id to clock(now))
             r.copy(steps = r.steps + (h.id to steps), habitTimes = times)
         }
     }
 
-    fun toggleStep(data: AppData, habitId: String, index: Int, now: LocalDateTime): AppData {
+    fun toggleStep(data: AppData, habitId: String, index: Int, now: LocalDateTime, day: String = data.currentDay): AppData {
         val h = data.habits.firstOrNull { it.id == habitId } ?: return data
-        val next = withDay(data, data.currentDay) { r ->
+        if (!canMark(data, day)) return data
+        val next = withDay(data, day) { r ->
             val cur = r.steps[h.id].orEmpty().toSet()
             val steps = (if (index in cur) cur - index else cur + index).sorted()
             r.copy(steps = r.steps + (h.id to steps))
         }
-        val nowDone = isDone(next, next.currentDay, h)
-        return withDay(next, next.currentDay) { r ->
+        val nowDone = isDone(next, day, h) && day == next.currentDay
+        return withDay(next, day) { r ->
             r.copy(habitTimes = if (nowDone) r.habitTimes + (h.id to clock(now)) else r.habitTimes - h.id)
         }
     }
 
-    fun toggleTask(data: AppData, taskId: String, now: LocalDateTime): AppData =
-        withDay(data, data.currentDay) { r ->
-            r.copy(tasks = if (taskId in r.tasks) r.tasks - taskId else r.tasks + (taskId to clock(now)))
+    /** Check a task off (or undo it) on [day]; for an earlier day no time is recorded. */
+    fun toggleTask(data: AppData, taskId: String, now: LocalDateTime, day: String = data.currentDay): AppData {
+        if (!canMark(data, day)) return data
+        return withDay(data, day) { r ->
+            r.copy(tasks = if (taskId in r.tasks) r.tasks - taskId else r.tasks + (taskId to if (day == data.currentDay) clock(now) else ""))
         }
+    }
+
+    /** Mark a habit done (all steps) or not done on [day], as the connector asks. No time is recorded. */
+    fun setHabitDone(data: AppData, habitId: String, day: String, done: Boolean): AppData {
+        val h = data.habits.firstOrNull { it.id == habitId } ?: return data
+        if (!canMark(data, day) || isDone(data, day, h) == done) return data
+        var d = data
+        if (done && date(day).isBefore(date(h.created))) d = d.copy(habits = d.habits.map { if (it.id == h.id) it.copy(created = day) else it })
+        return withDay(d, day) { r ->
+            r.copy(steps = r.steps + (habitId to if (done) h.steps.indices.toList() else emptyList()), habitTimes = r.habitTimes - habitId)
+        }
+    }
+
+    /** Habits scheduled on [day] (and existing by then) that weren't finished. */
+    fun missedOn(data: AppData, day: String): List<Habit> {
+        val d = date(day)
+        return data.habits.filter { scheduledOn(it, d) && !d.isBefore(date(it.created)) && !isDone(data, day, it) }
+    }
 
     fun doneCount(data: AppData): Int = data.habits.count { isDoneToday(data, it) }
 

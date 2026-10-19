@@ -263,4 +263,38 @@ class LogicTest {
         val values = Logic.bookNoteValues(d, mushrooms(d), mapOf("pages" to "unknown"))
         assertEquals("304", values["pages"])
     }
+
+    // ----- marking earlier days -----
+
+    @Test fun forgottenCheckInsCanBeMarkedOnAnyEarlierDay() {
+        // done 10, 11, 13 (missed 12 and 14); today 15: two misses in a row would reset... except 13 was done
+        var d = data("2026-10-15", listOf("2026-10-10", "2026-10-11", "2026-10-13"))
+        assertEquals(listOf("h"), Logic.missedOn(d, "2026-10-14").map { it.id })
+        assertEquals(3, Logic.streak(d, habit))
+        d = Logic.toggleHabit(d, "h", LocalDateTime.parse("2026-10-15T09:00"), "2026-10-14")
+        assertEquals(4, Logic.streak(d, habit))
+        assertTrue(Logic.isDone(d, "2026-10-14", habit))
+        assertEquals(null, d.days["2026-10-14"]?.habitTimes?.get("h")) // no made-up time for a past day
+        assertEquals(emptyList<Any>(), Logic.missedOn(d, "2026-10-14"))
+        d = Logic.toggleHabit(d, "h", LocalDateTime.parse("2026-10-15T09:00"), "2026-10-12")
+        assertEquals(5, Logic.streak(d, habit))
+        // The future can't be marked; today still works as before.
+        assertEquals(d, Logic.toggleHabit(d, "h", LocalDateTime.parse("2026-10-15T09:00"), "2026-10-16"))
+        assertEquals("2026-10-15", Logic.toggleHabit(d, "h", LocalDateTime.parse("2026-10-15T09:00")).currentDay)
+        // Marking before the habit existed moves its start back so the streak can count it.
+        d = Logic.toggleHabit(d, "h", LocalDateTime.parse("2026-10-15T09:00"), "2026-09-30")
+        assertEquals("2026-09-30", d.habits.first().created)
+        assertEquals(d, Logic.setHabitDone(d, "h", "2026-09-30", true))
+        assertTrue(!Logic.isDone(Logic.setHabitDone(d, "h", "2026-09-30", false), "2026-09-30", habit))
+    }
+
+    @Test fun pastDayTasksAndNoteSummaryUseThatDay() {
+        var d = migrated().copy(currentDay = "2026-10-22") // Thursday
+        d = Logic.toggleTask(d, "t3", LocalDateTime.parse("2026-10-22T10:00"), "2026-10-21") // Wednesday's nature time
+        assertEquals("", d.days["2026-10-21"]?.tasks?.get("t3"))
+        val summary = com.grove.app.obsidian.ObsidianSync.summary(d, "2026-10-21")
+        assertTrue(summary, summary.contains("- [x] Nature time (15+ min)\n") || summary.endsWith("- [x] Nature time (15+ min)"))
+        assertEquals(true, com.grove.app.obsidian.ObsidianSync.properties(d, "2026-10-21")["fifteen in nature"])
+        assertEquals(false, com.grove.app.obsidian.ObsidianSync.properties(d)["fifteen in nature"])
+    }
 }

@@ -41,6 +41,9 @@ data class InboxEntry(
     val book: String = "",
     val pages: Int = 0,
     val goal: String = "",
+    /** For "habit" and "task" entries: which one, and whether it's done (false undoes it). */
+    val item: String = "",
+    val done: Boolean = true,
 )
 
 /** Check-in history, written for the Grove connector to read. The app never reads it back. */
@@ -191,6 +194,10 @@ object VaultSync {
             for ((_, e) in entries) {
                 if (e.id in x.appliedInbox) continue
                 val day = e.day.ifEmpty { x.currentDay }
+                if (e.type == "habit") x = Logic.setHabitDone(x, e.item, day, e.done)
+                if (e.type == "task" && Logic.canMark(x, day)) x = Logic.withDay(x, day) { r ->
+                    if (e.done) (if (e.item in r.tasks) r else r.copy(tasks = r.tasks + (e.item to ""))) else r.copy(tasks = r.tasks - e.item)
+                }
                 x = Logic.withDay(x, day) { r ->
                     when (e.type) {
                         "pages" -> r.copy(pages = r.pages + (e.book to ((r.pages[e.book] ?: 0) + e.pages).coerceAtLeast(0)))
@@ -243,8 +250,8 @@ object VaultSync {
 
         `nextId`: the next number for new ids. Take ids from it (e.g. "t31", then set nextId to 32); never reuse an id.
 
-        Logging pages or sessions isn't done in this file: the Grove connector writes small files to `Grove/inbox/`,
-        which the app applies and deletes.
+        Logging pages, sessions or check-offs (for any past day) isn't done in this file: the Grove connector writes
+        small files to `Grove/inbox/`, which the app applies and deletes.
 
         Holy day fields: `id`, `name`, `date`, `detail`.
 
