@@ -181,7 +181,7 @@ object VaultSync {
         val data = Store.get(context)
         val inbox = folder(context, data)?.findFile("inbox") ?: return false
         // Names start with the time they were logged, so a correction lands after what it corrects.
-        val files = inbox.listFiles().filter { it.name?.endsWith(".json") == true }.sortedBy { it.name }
+        val files = inbox.listFiles().filter { f -> f.name.let { it != null && it.endsWith(".json") && !Logic.isSyncJunk(it) } }.sortedBy { it.name }
         if (files.isEmpty()) return false
         val entries = files.mapNotNull { f ->
             read(context, f)?.let { text -> runCatching { json.decodeFromString(InboxEntry.serializer(), text) }.getOrNull() }?.let { f to it }

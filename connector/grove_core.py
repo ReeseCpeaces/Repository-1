@@ -116,6 +116,8 @@ class Grove:
         out = []
         if self.inbox.exists():
             for f in sorted(self.inbox.glob("*.json")):
+                if self.is_sync_junk(f.name):
+                    continue
                 try:
                     e = json.loads(f.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
@@ -218,6 +220,8 @@ class Grove:
         eff = self.effective_history()
         goal = next((g for g in setup.get("goals", []) if g["kind"] == "pages"), None)
         msg = f"Logged {pages} pages of {b['title']} on {day}: now p. {self.book_page(eff, b)} of {b['pages']}."
+        if self.link_note(setup, b):
+            self.save_setup(setup)
         if self.sync_book_note(eff, b):
             msg += f" Updated {b['notePath']}."
         if goal:
@@ -258,8 +262,7 @@ class Grove:
             b["pages"] = pages
         if start_page is not None:
             b["startPage"] = max(0, min(start_page, b["pages"]))
-        if not b.get("notePath"):
-            b["notePath"] = self.match_note(setup, b["title"])
+        self.link_note(setup, b)
         self.save_setup(setup)
         self.sync_book_note(self.effective_history(), b)
         return b
@@ -358,7 +361,7 @@ class Grove:
         out = {"pagesRead": str(page)}
         if (last := self.last_read_on(history, b)):
             out["lastReadOn"] = last
-        if not note.get("pages"):
+        if self.page_count(note.get("pages")) is None:
             out["pages"] = str(b["pages"])
         if b["pages"] > 0 and page >= b["pages"]:
             out["read"] = "true"
@@ -369,23 +372,47 @@ class Grove:
             out["finished"] = None
         return out
 
+    @staticmethod
+    def is_sync_junk(name: str) -> bool:
+        """Syncthing conflict copies, temp files and hidden folders (.stfolder, .stversions): never read or linked."""
+        return ".sync-conflict-" in name or name.startswith(".") or name.startswith("~syncthing~")
+
+    @staticmethod
+    def page_count(v) -> int | None:
+        """A frontmatter page count, or None when it's missing, empty, "unknown" or otherwise not a number."""
+        v = str(v if v is not None else "").strip()
+        return int(v) if v.isdigit() and int(v) > 0 else None
+
     def druid_book_notes(self, setup: dict) -> list[dict]:
         folder = setup.get("settings", {}).get("booksFolder", "Books").strip("/") or "Books"
         out = []
         for f in sorted((self.vault / folder).glob("*.md")):
+            if self.is_sync_junk(f.name):
+                continue
             try:
                 front = self.frontmatter(f.read_text(encoding="utf-8"))
             except OSError:
                 continue
             if (front.get("subType") or front.get("subtype") or "").lower() == "druid book":
-                out.append({"path": f"{folder}/{f.name}", "title": front.get("title") or f.stem, "pages": int(front["pages"]) if str(front.get("pages", "")).isdigit() else 0})
+                out.append({"path": f"{folder}/{f.name}", "title": front.get("title") or f.stem, "pages": self.page_count(front.get("pages")) or 0})
         return out
 
-    def match_note(self, setup: dict, title: str) -> str:
-        claimed = {b.get("notePath") for b in setup.get("books", [])}
-        notes = [n for n in self.druid_book_notes(setup) if n["path"] not in claimed]
-        best = max(notes, key=lambda n: self.title_score(title, n["title"]), default=None)
-        return best["path"] if best and self.title_score(title, best["title"]) >= 0.6 else ""
+    def link_note(self, setup: dict, b: dict) -> bool:
+        """Same rules as Logic.linkBookNotes for one book: a deleted note is unlinked (never written back),
+        and an exact title match wins over a looser link. Returns True if notePath changed."""
+        old = b.get("notePath", "")
+        if old and not (self.vault / old).is_file():
+            b["notePath"] = ""
+        notes = self.druid_book_notes(setup)
+        claimed = {x.get("notePath") for x in setup.get("books", []) if x is not b}
+        free = [n for n in notes if n["path"] not in claimed and n["path"] != b.get("notePath")]
+        best = max(free, key=lambda n: self.title_score(b["title"], n["title"]), default=None)
+        if best:
+            score = self.title_score(b["title"], best["title"])
+            current = next((self.title_score(b["title"], n["title"]) for n in notes if n["path"] == b.get("notePath")), 1.0)
+            if (not b.get("notePath") and score >= 0.6) or (b.get("notePath") and score >= 1.0 and current < 1.0):
+                b["notePath"] = best["path"]
+        return b.get("notePath", "") != old
 
     def sync_book_note(self, history: dict, b: dict) -> bool:
         """Write progress into the book's note. A note that can't be read is never written."""

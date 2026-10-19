@@ -234,4 +234,33 @@ class LogicTest {
         d = Logic.skipLine(d, Logic.READING)
         assertTrue(!Logic.wantsLine(d, Logic.READING))
     }
+
+    @Test fun conflictCopiesDeletedNotesAndLooseMatchesDontMakeBooks() {
+        assertTrue(Logic.isSyncJunk("Michigan Trees (2004).sync-conflict-20261018-202415-KUKTOLE.md"))
+        assertTrue(Logic.isSyncJunk(".stversions"))
+        assertTrue(!Logic.isSyncJunk("Michigan Trees (2004).md"))
+        assertEquals(null, Logic.pageCount("unknown"))
+        assertEquals(null, Logic.pageCount(""))
+        assertEquals(304, Logic.pageCount(" 304 "))
+
+        val magic = Logic.BookNote("Books/Magic Mushrooms of the Upper Midwest (2022).md", "Magic Mushrooms of the Upper Midwest", 200)
+        val right = Logic.BookNote("Books/Mushrooms of the Upper Midwest.md", "Mushrooms of the Upper Midwest", 304)
+        // Only the wrong note exists at first, so Mushrooms links to it.
+        var d = Logic.linkBookNotes(migrated(), listOf(magic))
+        val mushrooms = { x: com.grove.app.data.AppData -> x.books.first { it.title.startsWith("Mushrooms") } }
+        assertEquals(magic.path, mushrooms(d).notePath)
+        // The right note appears: the exact title wins, and neither note becomes a new book.
+        d = Logic.linkBookNotes(d, listOf(magic, right))
+        assertEquals(right.path, mushrooms(d).notePath)
+        assertEquals(9, d.books.size)
+        // The note is deleted: unlinked, not recreated, and no other book picks up the loose match.
+        d = Logic.linkBookNotes(d, listOf(magic), missing = setOf(right.path))
+        assertEquals(magic.path, mushrooms(d).notePath) // re-matched by title on the same scan
+        d = Logic.linkBookNotes(d, emptyList(), missing = setOf(magic.path))
+        assertEquals("", mushrooms(d).notePath)
+        assertEquals(9, d.books.size)
+
+        val values = Logic.bookNoteValues(d, mushrooms(d), mapOf("pages" to "unknown"))
+        assertEquals("304", values["pages"])
+    }
 }

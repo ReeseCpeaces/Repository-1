@@ -326,24 +326,46 @@ object Logic {
     data class BookNote(val path: String, val title: String, val pages: Int)
 
     /**
-     * Link books to their notes by title (keeping links already made), and add a book for every
-     * Druid book note that has no book yet. Notes without a page count wait until it's filled in.
+     * Syncthing's own files: conflict copies ("x.sync-conflict-20261018-202415-KUKTOLE.md"), temp files,
+     * and hidden folders like .stfolder and .stversions. Grove never reads or links these.
      */
-    fun linkBookNotes(data: AppData, notes: List<BookNote>): AppData {
-        val claimed = data.books.map { it.notePath }.filter { p -> notes.any { it.path == p } }.toMutableSet()
-        var d = data.copy(books = data.books.map { b ->
-            if (b.notePath in claimed) return@map b
-            val best = notes.filter { it.path !in claimed }.maxByOrNull { titleScore(b.title, it.title) }
-            if (best != null && titleScore(b.title, best.title) >= 0.6) { claimed += best.path; b.copy(notePath = best.path) } else b
-        })
+    fun isSyncJunk(name: String): Boolean =
+        ".sync-conflict-" in name || name.startsWith(".") || name.startsWith("~syncthing~")
+
+    /**
+     * Link books to their notes by title, and add a book for each Druid book note that matches none.
+     * - A linked note in [missing] (deleted) is unlinked, never written back, and matched again.
+     * - An exact title match wins over a looser one ("Mushrooms of the Upper Midwest" over
+     *   "Magic Mushrooms of the Upper Midwest"), even if the looser one was linked first.
+     * - A note whose title is close to any existing book is never added as a new book.
+     * - Notes without a page count wait until it's filled in.
+     */
+    fun linkBookNotes(data: AppData, notes: List<BookNote>, missing: Set<String> = emptySet()): AppData {
+        val byPath = notes.associateBy { it.path }
+        var books = data.books.map { if (it.notePath.isNotEmpty() && it.notePath in missing) it.copy(notePath = "") else it }
+        val claimed = books.map { it.notePath }.filter { it.isNotEmpty() }.toMutableSet()
+        books = books.map { b ->
+            val best = notes.filter { it.path !in claimed }.maxByOrNull { titleScore(b.title, it.title) } ?: return@map b
+            val score = titleScore(b.title, best.title)
+            val switch = if (b.notePath.isEmpty()) score >= 0.6
+            else score >= 1.0 && (byPath[b.notePath]?.let { titleScore(b.title, it.title) } ?: 1.0) < 1.0
+            if (!switch) return@map b
+            claimed -= b.notePath
+            claimed += best.path
+            b.copy(notePath = best.path)
+        }
+        var d = data.copy(books = books)
         for (n in notes) {
-            if (n.path in claimed || n.pages <= 0) continue
+            if (n.path in claimed || n.pages <= 0 || d.books.any { titleScore(it.title, n.title) >= 0.6 }) continue
             val (id, next) = allocateId(d, "b")
             d = next.copy(books = next.books + Book(id, n.title, n.pages, piece = pieceFor(n.title), notePath = n.path))
             claimed += n.path
         }
         return d
     }
+
+    /** A frontmatter page count, or null when it's missing, empty, "unknown" or otherwise not a number. */
+    fun pageCount(v: String?): Int? = v?.trim()?.toIntOrNull()?.takeIf { it > 0 }
 
     /** Last day pages were logged for [b], or null. */
     fun lastReadOn(data: AppData, b: Book): String? = data.days.filter { (it.value.pages[b.id] ?: 0) > 0 }.keys.maxOrNull()
@@ -365,7 +387,7 @@ object Logic {
     fun bookNoteValues(data: AppData, b: Book, note: Map<String, String>): Map<String, String?> {
         val out = linkedMapOf<String, String?>("pagesRead" to bookPage(data, b).toString())
         lastReadOn(data, b)?.let { out["lastReadOn"] = it }
-        if (note["pages"].isNullOrBlank()) out["pages"] = b.pages.toString()
+        if (pageCount(note["pages"]) == null) out["pages"] = b.pages.toString()
         if (bookFinished(data, b)) {
             out["read"] = "true"
             if (note["finished"].isNullOrBlank()) out["finished"] = finishedOn(data, b) ?: data.currentDay

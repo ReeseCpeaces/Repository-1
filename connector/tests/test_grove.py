@@ -197,6 +197,40 @@ def test_frontmatter_edits_only_touch_given_keys():
     assert g.title_score("Michigan Snakes (Harding & Holman)", "Michigan Frogs, Toads, and Salamanders") < 0.6
 
 
+def druid(title: str, pages: str = "304") -> str:
+    return f"---\ntype: book\nsubType: Druid book\ntitle: {title}\npages: {pages}\nread: false\n---\nbody\n"
+
+
+def test_conflict_copies_deleted_notes_and_unknown_pages():
+    g = goal_vault()
+    books = g.vault / "Books"
+    books.mkdir()
+    (books / "Mushrooms of the Upper Midwest.md").write_text(druid("Mushrooms of the Upper Midwest", "unknown"))
+    (books / "Mushrooms of the Upper Midwest.sync-conflict-20261018-202415-KUKTOLE.md").write_text(druid("Mushrooms of the Upper Midwest"))
+    (books / "Magic Mushrooms of the Upper Midwest (2022).md").write_text(druid("Magic Mushrooms of the Upper Midwest"))
+    (g.inbox).mkdir()
+    (g.inbox / "x.sync-conflict-20261018-202415-KUKTOLE.json").write_text('{"id": "c1", "type": "pages", "book": "b33", "pages": 9}')
+    assert [n["path"] for n in g.druid_book_notes(g.load_setup())] == [
+        "Books/Magic Mushrooms of the Upper Midwest (2022).md", "Books/Mushrooms of the Upper Midwest.md"]
+    assert g.pending_inbox(g.load_history()) == []
+    # Mushrooms (b33) linked to the wrong note earlier: the exact title wins, and "unknown" pages get filled in.
+    setup = g.load_setup()
+    setup["books"][3]["title"] = "Mushrooms of the Upper Midwest (Marrone & Yerich)"
+    setup["books"][3]["notePath"] = "Books/Magic Mushrooms of the Upper Midwest (2022).md"
+    g.save_setup(setup)
+    g.log_pages("b33", 4)
+    assert g.load_setup()["books"][3]["notePath"] == "Books/Mushrooms of the Upper Midwest.md"
+    note = (books / "Mushrooms of the Upper Midwest.md").read_text()
+    assert "pages: 304" in note and "pagesRead: 4" in note
+    assert "pagesRead" not in (books / "Magic Mushrooms of the Upper Midwest (2022).md").read_text()
+    # A deleted note is unlinked, never written back.
+    (books / "Mushrooms of the Upper Midwest.md").unlink()
+    (books / "Magic Mushrooms of the Upper Midwest (2022).md").unlink()
+    g.log_pages("b33", 2)
+    assert g.load_setup()["books"][3]["notePath"] == ""
+    assert not (books / "Mushrooms of the Upper Midwest.md").exists()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

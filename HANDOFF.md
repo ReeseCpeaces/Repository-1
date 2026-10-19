@@ -45,7 +45,13 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   `obsidian/BookNotes.kt` writes `pagesRead`, `lastReadOn`, `pages` (only if missing), and when finished
   `read: true` + `finished: yyyy-MM-dd` (back to `read: false` and no `finished` if pages drop below the total).
   Media DB's `lastRead` and everything else in the note are left alone; an unreadable note is never written.
-  In a book note `read` = finished; in the daily note `read` = read something that day. Books screen has
+  In a book note `read` = finished; in the daily note `read` = read something that day.
+  Safety rules (after the Oct 18 duplicate-books bug): Syncthing files are ignored everywhere
+  (`Logic.isSyncJunk`: names with `.sync-conflict-`, dotfiles like `.stfolder`/`.stversions`, `~syncthing~`);
+  `pages: unknown` or any non-number counts as missing; a linked note that's gone is unlinked and matched
+  again, never recreated; an exact title match replaces a looser link; a note close to an existing
+  book's title is never added as a new book. Editing a book note on the server while Grove writes the
+  same note from the phone can still make a Syncthing conflict copy; Grove ignores it, delete it by hand. Books screen has
   "Open note" (`obsidian://open?vault=<vault folder name>&file=<path>`).
 - **"Add a line?"** (`ui/LinePrompt.kt`, `Logic.lineItems`): after checking off Morning practice (`SOP:`),
   Before-bed practice (`Meditation:`), nature tasks t3/t8 or prop `fifteen in nature` (`Nature:`), the
