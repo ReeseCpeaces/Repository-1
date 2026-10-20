@@ -276,6 +276,46 @@ def test_todos():
     assert [x["id"] for x in g.load_setup()["todos"]] == ["d28"]
 
 
+PROMPT_GOAL = {"id": "g45", "name": "My Deepest Me", "kind": "prompt", "deadline": "2027-06-21", "created": "2026-10-19",
+               "nudges": [{"weekday": 1, "time": "16:00", "below": 1.0}, {"weekday": 6, "time": "15:00", "below": 1.0}],
+               "total": 30, "current": 1, "title": "", "opened": "2026-10-19", "doneOn": "",
+               "noteFolder": "Druidry/GCC/My Deepest Me", "tracker": "Druidry/GCC/My Deepest Me - Tracker.md", "notesMade": []}
+
+
+def test_my_deepest_me_prompts():
+    g = goal_vault()  # Monday 2026-10-19
+    setup = g.load_setup()
+    setup["goals"].append(dict(PROMPT_GOAL))
+    g.save_setup(setup)
+    tracker = g.vault / "Druidry/GCC/My Deepest Me - Tracker.md"
+    tracker.parent.mkdir(parents=True)
+    tracker.write_text("# Tracker\n- [ ] **Prompt 1**: week of Oct 19, 2026\n- [ ] **Prompt 2**: week of Oct 26, 2026\n")
+    assert "Prompt 1 · aim for Friday, no title yet, 5 spare weeks before 2027-06-21" in g.overview()
+    g.prompt_title("who I was as a kid")
+    g.prompt_thought("the creek behind the house")
+    note = g.vault / "Druidry/GCC/My Deepest Me/Prompt 1.md"
+    text = note.read_text()
+    assert "title: who I was as a kid\n" in text and "# Prompt 1: who I was as a kid\n## Thoughts\n- 2026-10-19: the creek behind the house\n## Answer" in text
+    assert "Prompt 1 done" in g.prompt_done("It started there.")
+    text = note.read_text()
+    assert "finished: 2026-10-19" in text and text.rstrip().endswith("## Answer\nIt started there.")
+    assert tracker.read_text() == ("# Tracker\n- [x] **Prompt 1**: week of Oct 19, 2026 · [[Druidry/GCC/My Deepest Me/Prompt 1|note]]\n"
+                                   "- [ ] **Prompt 2**: week of Oct 26, 2026\n")
+    assert "Prompt 1 done for this week ✓" in g.overview()
+    # Next Monday the next prompt opens; a deleted note is never recreated.
+    history = json.loads(g.history_path.read_text())
+    history["currentDay"] = "2026-10-26"
+    g.history_path.write_text(json.dumps(history))
+    assert "Prompt 2 · aim for Friday" in g.overview()
+    g.prompt_thought("first idea")
+    (g.vault / "Druidry/GCC/My Deepest Me/Prompt 2.md").unlink()
+    try:
+        g.prompt_thought("again")
+        raise AssertionError("expected GroveError")
+    except GroveError:
+        pass
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

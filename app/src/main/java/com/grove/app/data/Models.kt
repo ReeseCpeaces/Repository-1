@@ -68,6 +68,12 @@ object GoalKind {
 
     /** Count pages across [AppData.books] toward a weekly target that finishes them by [Goal.deadline]. */
     const val PAGES = "pages"
+
+    /**
+     * One numbered prompt a week (My Deepest Me): opens Monday, mulled over all week, aim to finish by
+     * Friday. A prompt not done by Sunday stays open the next week. Only Reese's own words go in Grove.
+     */
+    const val PROMPT = "prompt"
 }
 
 /** A weekly goal: any day counts, no streak, a fresh count every Monday. */
@@ -85,7 +91,25 @@ data class Goal(
     /** Habit this goal replaced; its old check-offs count as past sessions. */
     val legacyHabit: String = "",
     val created: String,
+    // Prompt goals only:
+    /** How many prompts in all, and the one open now (1-based). */
+    val total: Int = 0,
+    val current: Int = 0,
+    /** Short title for the current prompt, in Reese's own words (never the book's text). */
+    val title: String = "",
+    /** Monday the current prompt opened, and the Grove day it was finished ("" = still open). */
+    val opened: String = "",
+    val doneOn: String = "",
+    /** Vault folder for "Prompt N.md" notes, and the tracker note whose "- [ ] **Prompt N**" lines get ticked. */
+    val noteFolder: String = "",
+    val tracker: String = "",
+    /** Prompts whose note exists or existed; a deleted one is never recreated. */
+    val notesMade: List<Int> = emptyList(),
 )
+
+/** A thought or final answer waiting to be written into a prompt's note. Removed once it's written. */
+@Serializable
+data class PromptEntry(val id: String, val goal: String, val prompt: Int, val section: String, val day: String, val text: String)
 
 /**
  * A book for a page goal. [piece] names the forest piece it adds when finished. [notePath] is its
@@ -188,6 +212,10 @@ data class AppData(
     val todos: List<Todo> = emptyList(),
     /** Names of linked to-dos deleted in Grove, to remove from the to-do note at the next sync. */
     val todoDeleted: List<String> = emptyList(),
+    /** Prompt thoughts and answers not yet written to their note. Kept only on the phone. */
+    val promptQueue: List<PromptEntry> = emptyList(),
+    /** The My Deepest Me prompt goal has been set up (so removing it later doesn't bring it back). */
+    val migratedPrompt: Boolean = false,
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

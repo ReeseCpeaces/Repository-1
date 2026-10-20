@@ -25,7 +25,9 @@ target of pages left / weeks left until the deadline (weeks start Monday). Log t
 grove_log_session and grove_log_pages.
 Each book can be linked to its note in the vault's Books folder (notePath); Grove writes pagesRead,
 lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
-in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off. Changes made
+in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off.
+"My Deepest Me" is a weekly prompt goal: one numbered prompt a week (read Monday, finish by Friday;
+a slipped prompt stays open). Never put the book's prompt text anywhere; only the user's own words. Changes made
 here reach the phone through Syncthing and apply when the Grove app next opens, so mention that
 after editing. Times are 24-hour HH:MM. Call grove_overview first to see ids and today's state."""
 
@@ -171,6 +173,26 @@ def grove_update_todo(todo_id: str, name: str | None = None, due: str | None = N
 def grove_remove_todo(todo_id: str) -> str:
     """Delete a to-do (it's also removed from the linked Obsidian to-do note)."""
     return _run(grove.remove, "to-do", todo_id)
+
+
+@mcp.tool()
+def grove_prompt_thought(text: str, day: str | None = None) -> str:
+    """Add a thought to this week's My Deepest Me prompt; it goes into the prompt's note under ## Thoughts as "- yyyy-MM-dd: text".
+    Only the user's own words: never write the book's prompt text."""
+    return _run(grove.prompt_thought, text, day)
+
+
+@mcp.tool()
+def grove_prompt_done(answer: str | None = None) -> str:
+    """Mark this week's My Deepest Me prompt done, with an optional final answer (saved under ## Answer in its note).
+    Ticks the prompt in the tracker note; the next prompt opens next Monday."""
+    return _run(grove.prompt_done, answer)
+
+
+@mcp.tool()
+def grove_prompt_title(title: str) -> str:
+    """Set the current prompt's short title, in the user's own words (never the book's text)."""
+    return _run(grove.prompt_title, title)
 
 
 @mcp.tool()

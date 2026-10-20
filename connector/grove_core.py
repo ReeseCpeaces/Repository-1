@@ -187,6 +187,8 @@ class Grove:
         return max(0, math.ceil(left / weeks))
 
     def progress(self, setup: dict, history: dict, g: dict, ref: date) -> tuple[int, int]:
+        if g["kind"] == "prompt":
+            return (1 if self.prompt_done_this_week(g, ref) or self.prompt_finished_all(g) else 0), 1
         if g["kind"] == "pages":
             return self.pages_this_week(history, ref), self.weekly_page_target(setup, history, g, ref)
         return self.sessions_this_week(history, g, ref), g.get("perWeek", 3)
@@ -498,6 +500,179 @@ class Grove:
         self.save_setup(setup)
         return t
 
+    # ----- weekly prompt goals: My Deepest Me (same as Prompts.kt) -----
+    # Only Reese's own words (title, thoughts, answer) go into Grove or the notes, never the book's prompt text.
+
+    @staticmethod
+    def prompt_finished_all(g: dict) -> bool:
+        return bool(g.get("doneOn")) and g.get("current", 0) >= g.get("total", 0)
+
+    def prompt_done_this_week(self, g: dict, ref: date) -> bool:
+        return bool(g.get("doneOn")) and self.week_start(date.fromisoformat(g["doneOn"])) == self.week_start(ref)
+
+    def prompt_effective(self, g: dict, ref: date) -> dict:
+        """The week after a prompt is finished, the next one opens on that Monday (the app saves this too)."""
+        g = dict(g)
+        monday = self.week_start(ref)
+        if g.get("doneOn") and g.get("current", 0) < g.get("total", 0) and monday > self.week_start(date.fromisoformat(g["doneOn"])):
+            g.update(current=g["current"] + 1, title="", opened=monday.isoformat(), doneOn="")
+        return g
+
+    @staticmethod
+    def prompts_left(g: dict) -> int:
+        return g["total"] - g["current"] + (0 if g.get("doneOn") else 1)
+
+    def prompt_weeks_left(self, g: dict, ref: date) -> int:
+        if not g.get("deadline"):
+            return self.prompts_left(g)
+        start = self.week_start(ref) + timedelta(days=7 if g.get("doneOn") else 0)
+        days = (date.fromisoformat(g["deadline"]) - start).days
+        return 0 if days <= 0 else (days + 6) // 7
+
+    def prompt_spare_weeks(self, g: dict, ref: date) -> int:
+        return self.prompt_weeks_left(g, ref) - self.prompts_left(g)
+
+    def prompt_status(self, g: dict, ref: date) -> str:
+        if self.prompt_finished_all(g):
+            return f"All {g['total']} prompts done ✓"
+        if self.prompt_done_this_week(g, ref):
+            return f"Prompt {g['current']} done for this week ✓"
+        if g.get("opened") and date.fromisoformat(g["opened"]) < self.week_start(ref):
+            o = date.fromisoformat(g["opened"])
+            return f"Prompt {g['current']} · open since {o.strftime('%b')} {o.day} · aim for Friday"
+        return f"Prompt {g['current']} · aim for Friday"
+
+    @staticmethod
+    def prompt_note_path(g: dict, n: int) -> str:
+        return f"{g.get('noteFolder', '').strip('/')}/Prompt {n}.md"
+
+    @staticmethod
+    def prompt_heading(n: int, title: str) -> str:
+        return f"# Prompt {n}" + (f": {title}" if title.strip() else "")
+
+    def prompt_template(self, n: int, title: str, opened: str) -> str:
+        return "\n".join(["---", "tags: [GCC, my-deepest-me]", f"prompt: {n}", f"title: {title}", f"opened: {opened}", "finished:", "---",
+                          self.prompt_heading(n, title), "## Thoughts", "## Answer", ""])
+
+    def prompt_apply_state(self, text: str, n: int, title: str, finished: str) -> str:
+        front = self.frontmatter(text)
+        values = {}
+        if front.get("title", "") != title:
+            values["title"] = title
+        if front.get("finished", "") != finished:
+            values["finished"] = finished
+        out = self.set_frontmatter(text, values).replace("finished: \n", "finished:\n") if values else text
+        nl = "\r\n" if "\r\n" in out else "\n"
+        lines = out.split(nl)
+        for i, line in enumerate(lines):
+            if re.fullmatch(rf"# Prompt {n}(:.*)?\s*", line):
+                lines[i] = self.prompt_heading(n, title)
+                break
+        return nl.join(lines)
+
+    @staticmethod
+    def append_to_section(text: str, section: str, items: list[str]) -> str:
+        if not items:
+            return text
+        nl = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(nl)
+        head = next((i for i, l in enumerate(lines) if re.fullmatch(rf"##\s+{re.escape(section)}\s*", l)), -1)
+        if head < 0:
+            while lines and lines[-1] == "":
+                lines.pop()
+            return nl.join(lines + [f"## {section}", *items, ""])
+        end = next((j for j in range(head + 1, len(lines)) if re.match(r"#{1,2}\s", lines[j])), len(lines))
+        at = end
+        while at > head + 1 and not lines[at - 1].strip():
+            at -= 1
+        lines[at:at] = items
+        return nl.join(lines)
+
+    TRACKER_LINE = re.compile(r"^(\s*[-*+] \[)([ xX])(\] \*\*Prompt (\d+)\*\*.*)$")
+
+    def apply_tracker(self, text: str, g: dict) -> str:
+        nl = "\r\n" if "\r\n" in text else "\n"
+        out = []
+        for line in text.split(nl):
+            m = self.TRACKER_LINE.match(line)
+            if m and int(m.group(4)) <= g["current"]:
+                n = int(m.group(4))
+                done = n < g["current"] or bool(g.get("doneOn"))
+                if done != (m.group(2) != " "):
+                    link = f" · [[{self.prompt_note_path(g, n)[:-3]}|note]]" if done and "[[" not in m.group(3) else ""
+                    line = m.group(1) + ("x" if done else " ") + m.group(3) + link
+            out.append(line)
+        return nl.join(out)
+
+    def _write_text(self, path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+
+    def _prompt_goal(self, setup: dict, history: dict) -> dict:
+        g = next((x for x in setup.get("goals", []) if x["kind"] == "prompt"), None)
+        if g is None:
+            raise GroveError("No prompt goal yet. Update the Grove app and open it once.")
+        eff = self.prompt_effective(g, date.fromisoformat(history["currentDay"]))
+        g.update(eff)  # save the week's roll-over too, the same way the app does
+        return g
+
+    def _prompt_note(self, g: dict, history: dict) -> Path:
+        """This prompt's note, created if it never existed. A note that was deleted is never recreated."""
+        n = g["current"]
+        path = self.vault / self.prompt_note_path(g, n)
+        if not path.is_file():
+            if n in g.get("notesMade", []):
+                raise GroveError(f"{self.prompt_note_path(g, n)} was deleted, so Grove won't recreate it. Restore it first.")
+            self._write_text(path, self.prompt_template(n, g.get("title", ""), g.get("opened") or history["currentDay"]))
+        g["notesMade"] = sorted(set(g.get("notesMade", [])) | {n})
+        return path
+
+    def _sync_prompt_files(self, g: dict, history: dict, section: str | None = None, items: list[str] | None = None) -> None:
+        path = self._prompt_note(g, history)
+        before = path.read_text(encoding="utf-8")
+        after = self.prompt_apply_state(before, g["current"], g.get("title", ""), g.get("doneOn", ""))
+        if section:
+            after = self.append_to_section(after, section, items or [])
+        if after != before:
+            self._write_text(path, after)
+        tracker = self.vault / g.get("tracker", "") if g.get("tracker") else None
+        if tracker and tracker.is_file():
+            t_before = tracker.read_text(encoding="utf-8")
+            t_after = self.apply_tracker(t_before, g)
+            if t_after != t_before:
+                self._write_text(tracker, t_after)
+
+    def prompt_thought(self, text: str, day: str | None = None) -> str:
+        if not text.strip():
+            raise GroveError("The thought is empty.")
+        setup, history = self.load_setup(), self.load_history()
+        g = self._prompt_goal(setup, history)
+        day = self.check_date(day) or history["currentDay"]
+        self._sync_prompt_files(g, history, "Thoughts", [f"- {day}: {' '.join(text.split())}"])
+        self.save_setup(setup)
+        return f"Added a thought to Prompt {g['current']} ({self.prompt_note_path(g, g['current'])})."
+
+    def prompt_done(self, answer: str | None = None) -> str:
+        setup, history = self.load_setup(), self.load_history()
+        g = self._prompt_goal(setup, history)
+        if g.get("doneOn"):
+            return f"Prompt {g['current']} is already done ({g['doneOn']})."
+        g["doneOn"] = history["currentDay"]
+        self._sync_prompt_files(g, history, "Answer", [answer.strip()] if answer and answer.strip() else [])
+        self.save_setup(setup)
+        return (f"Prompt {g['current']} done and ticked in the tracker. The app adds \"✓ {g['name']}: Prompt {g['current']}\" to the daily note "
+                "when it next opens; the next prompt opens Monday.")
+
+    def prompt_title(self, title: str) -> str:
+        setup, history = self.load_setup(), self.load_history()
+        g = self._prompt_goal(setup, history)
+        g["title"] = " ".join(title.split())
+        self._sync_prompt_files(g, history)
+        self.save_setup(setup)
+        return f"Prompt {g['current']} title set to \"{g['title']}\"."
+
     # ----- evening check-in and quiet hours (same as Logic.kt) -----
 
     DEFAULT_NOTIFY = {"eveningCheckIn": True, "checkInTime": "21:00", "quietStart": "21:00", "quietEnd": "08:00"}
@@ -546,7 +721,12 @@ class Grove:
             lines += ["", "Weekly goals (weeks start Monday, no streaks):"]
             for g in goals:
                 done, target = self.progress(setup, history, g, d)
-                if g["kind"] == "pages":
+                if g["kind"] == "prompt":
+                    g = self.prompt_effective(g, d)
+                    title = f', your title: "{g["title"]}"' if g.get("title") else ", no title yet"
+                    lines.append(f"- {g['name']} (id {g['id']}): {self.prompt_status(g, d)}{title}, "
+                                 f"{self.prompt_spare_weeks(g, d)} spare weeks before {g.get('deadline')}, note {self.prompt_note_path(g, g['current'])}")
+                elif g["kind"] == "pages":
                     b = self.current_book(setup, history)
                     where = f"; current book {b['title']} p. {self.book_page(history, b)} of {b['pages']}" if b else ""
                     lines.append(f"- {g['name']} (id {g['id']}): {done} / {target} pages this week, "

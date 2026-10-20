@@ -257,7 +257,12 @@ class TodayWidget : GlanceAppWidget() {
                     val g = data.goals[i]
                     val done = Logic.progress(data, g)
                     val target = Logic.target(data, g)
-                    val label = if (g.kind == com.grove.app.data.GoalKind.PAGES) "$done/$target p" else if (done > target) "$done/$target ★" else "$done/$target"
+                    val label = when {
+                        g.kind == com.grove.app.data.GoalKind.PROMPT -> if (com.grove.app.data.Prompts.finishedAll(g)) "✓" else "P${g.current}" + if (done > 0) " ✓" else ""
+                        g.kind == com.grove.app.data.GoalKind.PAGES -> "$done/$target p"
+                        done > target -> "$done/$target ★"
+                        else -> "$done/$target"
+                    }
                     Row(GlanceModifier.fillMaxWidth().padding(vertical = 2.dp).clickable(actionStartActivity<MainActivity>()),
                         verticalAlignment = Alignment.CenterVertically) {
                         Text("☆", GlanceModifier.width(26.dp), style(GREEN, 15, center = true))

@@ -48,6 +48,7 @@ import com.grove.app.data.Book
 import com.grove.app.data.Goal
 import com.grove.app.data.GoalKind
 import com.grove.app.data.Logic
+import com.grove.app.data.Prompts
 import com.grove.app.data.Store
 import com.grove.app.obsidian.ObsidianSync
 
@@ -58,7 +59,7 @@ fun shortTitle(b: Book) = b.title.substringBefore(" (").substringBefore(":")
 @Composable
 fun GoalCards(data: AppData, go: (Screen) -> Unit) {
     var logging by remember { mutableStateOf<Goal?>(null) }
-    for (g in data.goals) {
+    for (g in data.goals.filter { it.kind != GoalKind.PROMPT }) {
         val done = Logic.progress(data, g)
         val target = Logic.target(data, g)
         Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
@@ -99,7 +100,48 @@ fun GoalCards(data: AppData, go: (Screen) -> Unit) {
             }
         }
     }
+    for (g in data.goals.filter { it.kind == GoalKind.PROMPT }) PromptCard(data, g)
     logging?.let { LogPagesDialog(data) { logging = null } }
+}
+
+/** A weekly prompt (My Deepest Me): mull it over all week, add thoughts any time, finish by Friday. */
+@Composable
+private fun PromptCard(data: AppData, g: Goal) {
+    val context = LocalContext.current
+    var dialog by remember { mutableStateOf("") }
+    val today = Logic.groveToday(data)
+    val all = Prompts.finishedAll(g)
+    val done = all || Prompts.doneThisWeek(g, today)
+    val n = g.current
+    Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
+        Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(g.name, fontSize = 16.sp)
+            Text(Prompts.status(g, today), fontSize = 12.sp, color = if (done) GroveColors.Green else GroveColors.Muted)
+            if (!all) {
+                Text(if (g.title.isBlank()) "+ Add a short title in your own words" else "“${g.title}”",
+                    fontSize = 13.sp, color = if (g.title.isBlank()) GroveColors.Green else GroveColors.Text,
+                    modifier = Modifier.clickable { dialog = "title" }.padding(vertical = 4.dp))
+                val spare = Prompts.spareWeeks(g, today)
+                if (g.deadline.isNotEmpty()) Text("$spare spare week${if (spare == 1) "" else "s"} before ${g.deadline}", fontSize = 11.sp,
+                    color = if (spare < 0) GroveColors.Warn else GroveColors.Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = { dialog = "thought" }) { Icon(Icons.Filled.Add, null, Modifier.size(16.dp)); Text(" Thought") }
+                    if (!done) FilledTonalButton(onClick = { dialog = "done" }) { Icon(Icons.Filled.Check, null, Modifier.size(16.dp)); Text(" Done") }
+                    else OutlinedButton(onClick = { Store.update(context) { Prompts.undoDone(it, g.id) } }) { Text("Undo") }
+                }
+            }
+        }
+    }
+    when (dialog) {
+        "thought" -> TextEntryDialog("A thought on Prompt $n", "Thought", "Saved to Prompt $n in Obsidian, under Thoughts.", "Save",
+            onSave = { t -> Store.update(context) { Prompts.addThought(it, g.id, t) } }, onClose = { dialog = "" })
+        "done" -> TextEntryDialog("Done with Prompt $n?", "Final answer (optional)",
+            "Saved under Answer in the prompt's note. The daily note only gets “✓ ${g.name}: Prompt $n”.", "Done", allowEmpty = true,
+            onSave = { t -> Store.update(context) { Prompts.markDone(it, g.id, t) } }, onClose = { dialog = "" })
+        "title" -> TextEntryDialog("Prompt $n title", "Short title, your own words", "e.g. who I was as a kid. Never the book's text.", "Save",
+            initial = g.title, allowEmpty = true, singleLine = true,
+            onSave = { t -> Store.update(context) { Prompts.setTitle(it, g.id, t) } }, onClose = { dialog = "" })
+    }
 }
 
 /** Pick a book (defaults to the last one used) and add pages, even 2. */

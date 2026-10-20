@@ -73,6 +73,10 @@ object ObsidianSync {
         }
         for (t in com.grove.app.data.Todos.doneOn(data, day)) lines += "- [x] To-do: ${t.name}"
         for (g in data.goals) {
+            if (g.kind == com.grove.app.data.GoalKind.PROMPT) {
+                lines += "${g.name}: " + com.grove.app.data.Prompts.status(g.copy(title = ""), d).substringBefore(" · aim")
+                continue
+            }
             val today = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day).let { if (it > 0) " (+$it pages today)" else "" }
             else if (Logic.sessionLogged(data, day, g)) " (session today)" else ""
             val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else ""

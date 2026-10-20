@@ -299,11 +299,24 @@ object Logic {
 
     private fun ceilDiv(a: Long, b: Long): Long = if (a <= 0) 0 else (a + b - 1) / b
 
-    fun progress(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
-        if (g.kind == GoalKind.PAGES) pagesThisWeek(data, ref) else sessionsThisWeek(data, g, ref)
+    fun progress(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int = when (g.kind) {
+        GoalKind.PAGES -> pagesThisWeek(data, ref)
+        GoalKind.PROMPT -> if (Prompts.doneThisWeek(g, ref) || Prompts.finishedAll(g)) 1 else 0
+        else -> sessionsThisWeek(data, g, ref)
+    }
 
-    fun target(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
-        if (g.kind == GoalKind.PAGES) weeklyPageTarget(data, g, ref) else g.perWeek
+    fun target(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int = when (g.kind) {
+        GoalKind.PAGES -> weeklyPageTarget(data, g, ref)
+        GoalKind.PROMPT -> 1
+        else -> g.perWeek
+    }
+
+    /** One-line weekly status for the pinned notification and widget, e.g. "2/3 this week" or "Prompt 3 ✓". */
+    fun goalStatus(data: AppData, g: Goal): String = when (g.kind) {
+        GoalKind.PROMPT -> if (Prompts.finishedAll(g)) "all done ✓" else "Prompt ${g.current}" + if (progress(data, g) > 0) " ✓" else ""
+        GoalKind.PAGES -> "${progress(data, g)}/${target(data, g)} pages this week"
+        else -> "${progress(data, g)}/${target(data, g)} this week"
+    }
 
     /** The nudge for [day], if it's that weekday and progress is still under its threshold. */
     fun dueNudge(data: AppData, g: Goal, day: LocalDate): Nudge? {

@@ -89,6 +89,17 @@ class ReminderReceiver : BroadcastReceiver() {
             val target = Logic.target(data, g, day)
             val done = Logic.progress(data, g, day)
             if (done >= target) return
+            if (g.kind == com.grove.app.data.GoalKind.PROMPT) {
+                if (com.grove.app.data.Prompts.finishedAll(g)) return
+                val newThisWeek = g.opened.isEmpty() || !Logic.date(g.opened).isBefore(Logic.weekStart(day))
+                val text = when (day.dayOfWeek) {
+                    java.time.DayOfWeek.MONDAY -> if (newThisWeek) "New prompt this week: Prompt ${g.current}" else "Prompt ${g.current} is still open this week"
+                    java.time.DayOfWeek.SATURDAY -> "Wrap up Prompt ${g.current} today?"
+                    else -> "Prompt ${g.current} is open"
+                }
+                Notifier.showNudge(context, id, g.name, text, snooze)
+                return
+            }
             val text = if (g.kind == com.grove.app.data.GoalKind.PAGES) {
                 val book = Logic.currentBook(data)
                 "$done / $target pages this week" + (book?.let { " · ${it.title.substringBefore(" (")} p. ${Logic.bookPage(data, it)}" } ?: "") +

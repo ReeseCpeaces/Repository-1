@@ -62,6 +62,24 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   from a widget or notification are offered when the app is next opened. Per-item off switches in
   Settings (`Settings.linePromptOff`). Reese's Dataview tables collect these lines by their exact
   prefixes (`Nature:`, `Plant:`, `Meditation:`, `SOP:`, `Lifestyle:`), so keep them.
+- **My Deepest Me (weekly prompt goal, `GoalKind.PROMPT`; rules in `data/Prompts.kt`, notes in
+  `obsidian/PromptNotes.kt`):** 30 prompts, Prompt 1 = week of Mon Oct 19, 2026, deadline 2027-06-21.
+  Replaces task t12 (removed; t13 kept). One prompt open at a time (`Goal.current`); read Monday, mull
+  all week, aim for Friday. Today card: status ("Prompt 3 · aim for Friday" / "done for this week ✓" /
+  "open since …"), spare weeks (weeks left − prompts left), an optional short title in Reese's own words,
+  "+ Thought" (any number) and "Done" (optional final answer). **Never put the book's prompt text in Grove.**
+  - Done: `doneOn` set, the next prompt opens the following Monday (`Prompts.advance`, run by Migrate);
+    not done by Sunday = it stays open (no skipping). Daily note gets only "- ✓ My Deepest Me: Prompt N".
+  - Notes: `Druidry/GCC/My Deepest Me/Prompt N.md` (template with tags/prompt/title/opened/finished,
+    "## Thoughts" gets "- yyyy-MM-dd: text", "## Answer" gets the answer). Created when the prompt
+    opens; `notesMade` remembers which existed, so a deleted note is never recreated (its queued text
+    waits instead). Thoughts/answers wait in `AppData.promptQueue` (phone only) until written.
+    The tracker `Druidry/GCC/My Deepest Me - Tracker.md` lines `- [ ] **Prompt N**: week of …` are
+    ticked (with a link to the note) for finished prompts.
+  - Nudges: Monday 16:00 ("New prompt this week" / "still open"), Saturday 15:00 if still open; quiet
+    hours apply. No streak, no Forest piece.
+  - Connector: `grove_prompt_thought`, `grove_prompt_done`, `grove_prompt_title` write the note and
+    tracker directly and update grove.json; the app adds the daily-note line when it imports a done.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a

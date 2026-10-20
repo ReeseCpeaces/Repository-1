@@ -75,3 +75,34 @@ fun PendingLinePrompt(data: AppData) {
         )
     }
 }
+
+/** A small text box for a few words (the keyboard's mic works). Empty is allowed only if [allowEmpty]. */
+@Composable
+fun TextEntryDialog(
+    title: String,
+    label: String,
+    hint: String,
+    confirm: String,
+    initial: String = "",
+    allowEmpty: Boolean = false,
+    singleLine: Boolean = false,
+    onSave: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                text, { text = it }, label = { Text(label) }, supportingText = { Text(hint) }, singleLine = singleLine,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        },
+        confirmButton = { TextButton(enabled = allowEmpty || text.isNotBlank(), onClick = { onSave(text.trim()); onClose() }) { Text(confirm) } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
+}

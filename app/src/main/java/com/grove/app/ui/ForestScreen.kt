@@ -267,10 +267,10 @@ fun ForestScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                     }
                 }
             }
-            if (data.goals.isNotEmpty()) {
+            if (data.goals.any { it.kind != GoalKind.PROMPT }) {
                 Card {
                     Column {
-                        data.goals.forEach { g ->
+                        data.goals.filter { it.kind != GoalKind.PROMPT }.forEach { g ->
                             val (name, swatch, detail) = if (g.kind == GoalKind.PAGES) {
                                 val finished = data.books.count { Logic.bookFinished(data, it) }
                                 Triple("Reading seedling", Color(0xFF86D72F), "${g.name} · $finished of ${data.books.size} books finished, each adds its own piece")

@@ -47,6 +47,24 @@ object Migrate {
                 }
             }
         }
+        // Oct 2026: My Deepest Me became a weekly prompt goal (Prompt 1 = week of Oct 19), replacing task t12.
+        if (d.goals.none { it.kind == GoalKind.PROMPT } && !d.migratedPrompt) {
+            val (id, next) = Logic.allocateId(d, "g")
+            d = next.copy(
+                goals = next.goals + Goal(
+                    id, "My Deepest Me", GoalKind.PROMPT, deadline = "2027-06-21",
+                    nudges = listOf(Nudge(1, "16:00", 1.0), Nudge(6, "15:00", 1.0)),
+                    created = "2026-10-19", total = 30, current = 1, opened = "2026-10-19",
+                    noteFolder = "Druidry/GCC/My Deepest Me", tracker = "Druidry/GCC/My Deepest Me - Tracker.md",
+                ),
+                tasks = next.tasks.filter { it.id != "t12" },
+                migratedPrompt = true,
+            )
+        }
+        // t12 ("My Deepest Me: start this week's prompt") stays gone, even if an older grove.json brings it back.
+        if (d.migratedPrompt && d.tasks.any { it.id == "t12" }) d = d.copy(tasks = d.tasks.filter { it.id != "t12" })
+        d = Prompts.advance(d)
+        if (d.promptQueue.size > 200) d = d.copy(promptQueue = d.promptQueue.takeLast(200))
         // A habit replaced by a goal stays retired, even if an older grove.json brings it back.
         // Its check-ins stay in history.
         val retired = d.goals.map { it.legacyHabit }.filter { it.isNotEmpty() }.toSet()

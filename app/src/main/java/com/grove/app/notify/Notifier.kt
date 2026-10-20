@@ -66,10 +66,7 @@ object Notifier {
             val mark = if (Logic.isDoneToday(data, h)) "✓" else "○"
             style.addLine("$mark  ${h.name}  ·  ${Logic.streak(data, h)}d")
         }
-        data.goals.forEach { g ->
-            val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else ""
-            style.addLine("☆  ${g.name}  ·  ${Logic.progress(data, g)}/${Logic.target(data, g)}$unit this week")
-        }
+        data.goals.forEach { g -> style.addLine("☆  ${g.name}  ·  ${Logic.goalStatus(data, g)}") }
         val b = NotificationCompat.Builder(context, CHANNEL_PINNED)
             .setSmallIcon(R.drawable.ic_stat_grove)
             .setContentTitle(title)

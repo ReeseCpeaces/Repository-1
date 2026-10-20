@@ -171,13 +171,15 @@ object VaultSync {
             d.copy(
                 habits = setup.habits, tasks = setup.tasks, holyDays = setup.holyDays,
                 settings = setup.settings.copy(vaultUri = d.settings.vaultUri),
-                goals = setup.goals ?: d.goals, books = setup.books ?: d.books,
+                // A grove.json written before the prompt goal existed doesn't remove it.
+                goals = setup.goals?.let { g -> g + d.goals.filter { it.kind == com.grove.app.data.GoalKind.PROMPT && g.none { x -> x.id == it.id } } } ?: d.goals,
+                books = setup.books ?: d.books,
                 nextId = maxOf(d.nextId, setup.nextId ?: 0),
                 todos = setup.todos ?: d.todos,
                 // Linked to-dos deleted in grove.json (say, by Claude) also leave the to-do note.
                 todoDeleted = d.todoDeleted + if (setup.todos == null) emptyList()
                     else d.todos.filter { t -> t.inNote && setup.todos.none { it.id == t.id } }.map { it.noteName },
-            )
+            ).let { com.grove.app.data.Prompts.noteNewlyDone(d, it) }
         }
         return true
     }

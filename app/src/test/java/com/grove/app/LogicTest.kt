@@ -130,7 +130,7 @@ class LogicTest {
     @Test fun writingAndReadingBecomeWeeklyGoals() {
         val d = migrated()
         assertEquals(listOf("h1", "h2", "h3"), d.habits.map { it.id })
-        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES), d.goals.map { it.kind })
+        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES, GoalKind.PROMPT), d.goals.map { it.kind })
         assertEquals(9, d.books.size)
         assertEquals(2587, d.books.sumOf { it.pages })
         assertTrue(d.goals.none { it.id == "h4" || it.id == "h5" })
@@ -359,5 +359,55 @@ class LogicTest {
         assertTrue(text5, !text5.contains("Buy seeds"))
         assertTrue(d5.todos.none { it.name == "Buy seeds" })
         text = text5
+    }
+
+    // ----- My Deepest Me: weekly prompts -----
+
+    @Test fun myDeepestMeIsAWeeklyPromptThatSlipsInsteadOfSkipping() {
+        val P = com.grove.app.data.Prompts
+        var d = Migrate.run(Seed.data(LocalDate.parse("2026-10-19")).let {
+            it.copy(tasks = it.tasks + com.grove.app.data.Task("t12", "My Deepest Me: start this week's prompt"))
+        })
+        assertTrue(d.tasks.none { it.id == "t12" })
+        val g = P.goals(d).single()
+        val mon = LocalDate.parse("2026-10-19")
+        assertEquals("Prompt 1 · aim for Friday", P.status(g, mon))
+        assertEquals(5, P.spareWeeks(g, mon))
+        assertEquals(0, Logic.progress(d, g))
+        assertTrue(Logic.dueNudge(d, g, LocalDate.parse("2026-10-24")) != null) // Saturday nudge while open
+
+        d = P.addThought(d, g.id, "the creek")
+        d = P.markDone(d, g.id, "It started there.")
+        assertEquals(listOf("Thoughts", "Answer"), d.promptQueue.map { it.section })
+        assertEquals(listOf("✓ My Deepest Me: Prompt 1"), d.today.lines)
+        val done = P.goals(d).single()
+        assertEquals("Prompt 1 done for this week ✓", P.status(done, mon))
+        assertEquals(null, Logic.dueNudge(d, done, LocalDate.parse("2026-10-24")))
+        // Next Monday, Prompt 2 opens.
+        d = Migrate.run(d.copy(currentDay = "2026-10-26"))
+        assertEquals(2, P.goals(d).single().current)
+        assertEquals("2026-10-26", P.goals(d).single().opened)
+        // Not done by Sunday: it stays open the week after, with one fewer spare week.
+        d = Migrate.run(d.copy(currentDay = "2026-11-02"))
+        val slipped = P.goals(d).single()
+        assertEquals(2, slipped.current)
+        assertEquals("Prompt 2 · open since Oct 26 · aim for Friday", P.status(slipped, LocalDate.parse("2026-11-02")))
+        assertEquals(4, P.spareWeeks(slipped, LocalDate.parse("2026-11-02")))
+    }
+
+    @Test fun promptNoteAndTrackerEdits() {
+        val P = com.grove.app.data.Prompts
+        val g = P.goals(migrated()).single().copy(title = "who I was as a kid", doneOn = "2026-10-23")
+        val note = P.template(g, 1, "", "2026-10-19")
+        assertTrue(note.startsWith("---\ntags: [GCC, my-deepest-me]\nprompt: 1\ntitle: \nopened: 2026-10-19\nfinished:\n---\n# Prompt 1\n## Thoughts\n## Answer\n"))
+        var t = P.applyState(note, g, 1, g.title, g.doneOn)
+        t = P.appendToSection(t, P.THOUGHTS, listOf("- 2026-10-20: the creek"))
+        t = P.appendToSection(t, P.ANSWER, listOf("It started there."))
+        assertTrue(t, t.contains("title: who I was as a kid\n"))
+        assertTrue(t, t.contains("finished: 2026-10-23\n"))
+        assertTrue(t, t.contains("# Prompt 1: who I was as a kid\n## Thoughts\n- 2026-10-20: the creek\n## Answer\nIt started there.\n"))
+        val tracker = "- [ ] **Prompt 1**: week of Oct 19, 2026\n- [ ] **Prompt 2**: week of Oct 26, 2026\n"
+        assertEquals("- [x] **Prompt 1**: week of Oct 19, 2026 · [[Druidry/GCC/My Deepest Me/Prompt 1|note]]\n- [ ] **Prompt 2**: week of Oct 26, 2026\n",
+            P.applyTracker(tracker, g))
     }
 }

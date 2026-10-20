@@ -5,6 +5,7 @@ import com.grove.app.notify.AlarmScheduler
 import com.grove.app.notify.Notifier
 import com.grove.app.obsidian.BookNotes
 import com.grove.app.obsidian.ObsidianSync
+import com.grove.app.obsidian.PromptNotes
 import com.grove.app.obsidian.TodoNote
 import com.grove.app.obsidian.VaultSync
 import com.grove.app.widget.Widgets
@@ -20,6 +21,7 @@ object Effects {
         VaultSync.exportAsync(context, old, new)
         BookNotes.syncAsync(context, old, new)
         TodoNote.syncAsync(context, old, new)
+        PromptNotes.syncAsync(context, old, new)
     }
 
     /** Full refresh after boot, an app update, or opening the app. Call off the main thread. */
@@ -32,6 +34,8 @@ object Effects {
         runCatching { BookNotes.scan(context) }
         // Pick up to-dos added or ticked in the Obsidian to-do note.
         TodoNote.syncAsync(context, null, Store.get(context))
+        // Create this week's prompt note and write any waiting thoughts.
+        PromptNotes.syncAsync(context, null, Store.get(context))
         Store.refreshDay(context)
         val data = Store.get(context)
         Notifier.showPinned(context, data)
