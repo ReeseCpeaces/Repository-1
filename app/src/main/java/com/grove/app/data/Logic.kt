@@ -44,6 +44,14 @@ object Logic {
         return if (gap > 1 || now.hour >= data.settings.cutoffHour) key(today) else data.currentDay
     }
 
+    /** The calendar has moved past Grove's day (after midnight, before Morning practice or the cutoff). */
+    fun newDayWaiting(data: AppData, now: LocalDateTime): Boolean =
+        data.currentDay.isNotEmpty() && now.toLocalDate().isAfter(date(data.currentDay))
+
+    /** Start the calendar's day now, without checking anything off. */
+    fun startNewDay(data: AppData, now: LocalDateTime): AppData =
+        if (newDayWaiting(data, now)) data.copy(currentDay = key(now.toLocalDate())) else data
+
     // ----- habits -----
 
     fun scheduledOn(h: Habit, d: LocalDate): Boolean = h.days[weekdayIndex(d)]
@@ -162,8 +170,9 @@ object Logic {
         if (!canMark(data, day)) return data
         var d = data
         var target = day
-        // Checking off the morning habit after a calendar rollover starts the new day.
-        if (day == data.currentDay && h.role == Role.MORNING && !isDoneToday(d, h)) {
+        // Checking off the morning habit once the calendar has moved on starts the new day, even if
+        // yesterday's Morning practice is still showing as done (it's never unchecked by mistake).
+        if (day == data.currentDay && h.role == Role.MORNING) {
             val today = key(now.toLocalDate())
             if (date(today).isAfter(date(d.currentDay))) { d = d.copy(currentDay = today); target = today }
         }

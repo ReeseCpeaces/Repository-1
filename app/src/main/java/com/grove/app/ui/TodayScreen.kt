@@ -60,6 +60,20 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                     IconButton(onClick = { go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
                 }
                 Tabs(forest = false, onToday = {}, onForest = { tab(Screen.Forest) })
+                // Up early? Grove's day still shows yesterday until Morning practice; offer to start today.
+                if (Logic.newDayWaiting(data, LocalDateTime.now())) {
+                    val cal = java.time.LocalDate.now()
+                    Card(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Column(Modifier.padding(vertical = 10.dp)) {
+                            Text("Still ${Logic.weekdayName(day)} ${day.dayOfMonth} in Grove", fontWeight = FontWeight.SemiBold)
+                            Text("A new day starts when you check off Morning practice, or at ${Logic.fmtTime("%02d:00".format(data.settings.cutoffHour))}. " +
+                                "Before-bed practice after midnight still counts for ${Logic.weekdayName(day)}.", fontSize = 12.sp, color = GroveColors.Muted)
+                            TextButton(onClick = { Store.update(context) { Logic.startNewDay(it, LocalDateTime.now()) } }) {
+                                Text("Start ${Logic.weekdayName(cal)} ${cal.dayOfMonth} now")
+                            }
+                        }
+                    }
+                }
                 // Tap a day to open its hour-by-hour view.
                 WeekStrip(data, day) { go(Screen.Day(it.toString())) }
             }

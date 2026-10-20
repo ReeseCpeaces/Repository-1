@@ -410,4 +410,21 @@ class LogicTest {
         assertEquals("- [x] **Prompt 1**: week of Oct 19, 2026 · [[Druidry/GCC/My Deepest Me/Prompt 1|note]]\n- [ ] **Prompt 2**: week of Oct 26, 2026\n",
             P.applyTracker(tracker, g))
     }
+
+    @Test fun upEarlyMorningPracticeStartsTheNewDayEvenIfYesterdaysIsChecked() {
+        var d = Seed.data(LocalDate.parse("2026-10-19"))
+        d = Logic.toggleHabit(d, "h1", LocalDateTime.parse("2026-10-19T07:00")) // Monday's Morning practice
+        val early = LocalDateTime.parse("2026-10-20T05:30")
+        assertEquals("2026-10-19", Logic.rolledDay(d, early)) // before 2 PM, still Monday
+        assertTrue(Logic.newDayWaiting(d, early))
+        d = Logic.toggleHabit(d, "h1", early) // tapping it now starts Tuesday instead of unchecking Monday
+        assertEquals("2026-10-20", d.currentDay)
+        assertTrue(Logic.isDone(d, "2026-10-19", d.habits.first { it.id == "h1" }))
+        assertTrue(Logic.isDone(d, "2026-10-20", d.habits.first { it.id == "h1" }))
+        assertTrue(!Logic.newDayWaiting(d, early))
+        // Or start the day without checking anything.
+        val other = Logic.startNewDay(Logic.toggleHabit(Seed.data(LocalDate.parse("2026-10-19")), "h1", LocalDateTime.parse("2026-10-19T07:00")), early)
+        assertEquals("2026-10-20", other.currentDay)
+        assertTrue(!Logic.isDone(other, "2026-10-20", other.habits.first { it.id == "h1" }))
+    }
 }

@@ -86,6 +86,19 @@ fun DayScreen(data: AppData, dateKey: String, go: (Screen) -> Unit, back: () -> 
                 }
             }
             item { WeekStrip(data, date) { date = it } }
+            if (date == LocalDate.now() && date.isAfter(today)) {
+                item {
+                    Card(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Column(Modifier.padding(vertical = 10.dp)) {
+                            Text("Grove is still on ${Logic.weekdayName(today)} ${today.dayOfMonth}. Start this day to check things off.",
+                                fontSize = 13.sp, color = GroveColors.Muted)
+                            androidx.compose.material3.TextButton(onClick = { Store.update(context) { Logic.startNewDay(it, LocalDateTime.now()) } }) {
+                                Text("Start ${Logic.weekdayName(date)} ${date.dayOfMonth} now")
+                            }
+                        }
+                    }
+                }
+            }
             if (holy != null) {
                 item {
                     Text(
