@@ -56,11 +56,7 @@ class ReminderReceiver : BroadcastReceiver() {
                     val now = LocalDateTime.now()
                     if (kind == KIND_TODO) {
                         if (d.todos.firstOrNull { it.id == id }?.done?.isEmpty() == true) com.grove.app.data.Todos.toggle(d, id) else d
-                    } else if (kind == KIND_TODO) {
-            val t = data.todos.firstOrNull { it.id == id } ?: return
-            if (t.done.isNotEmpty()) return
-            Notifier.showReminder(context, kind, id, t.name, "To-do" + (if (t.due.isNotEmpty()) " · do by ${t.due}" else "") + (if (t.list.isNotEmpty()) " · ${t.list}" else ""), snooze)
-        } else if (kind == KIND_HABIT) {
+                    } else if (kind == KIND_HABIT) {
                         val h = d.habits.firstOrNull { it.id == id }
                         if (h == null || Logic.isDoneToday(d, h)) d else Logic.toggleHabit(d, id, now)
                     } else {
@@ -99,6 +95,10 @@ class ReminderReceiver : BroadcastReceiver() {
                     ". Even a couple of pages counts."
             } else "${Logic.sessionLabel(done, target)}. Any session counts, however short."
             Notifier.showNudge(context, id, g.name, text, snooze)
+        } else if (kind == KIND_TODO) {
+            val t = data.todos.firstOrNull { it.id == id } ?: return
+            if (t.done.isNotEmpty()) return
+            Notifier.showReminder(context, kind, id, t.name, "To-do" + (if (t.due.isNotEmpty()) " · do by ${t.due}" else "") + (if (t.list.isNotEmpty()) " · ${t.list}" else ""), snooze)
         } else if (kind == KIND_HABIT) {
             val h = data.habits.firstOrNull { it.id == id } ?: return
             if (Logic.isDoneToday(data, h)) return
