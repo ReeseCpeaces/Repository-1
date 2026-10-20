@@ -72,7 +72,7 @@ object PromptNotes {
             val f = ObsidianSync.find(root, Prompts.notePath(g, p))?.takeIf { it.isFile }
             val before = f?.let { read(context, it) }
             if (f != null && before != null) {
-                var after = before
+                var after: String = before
                 for (section in listOf(Prompts.THOUGHTS, Prompts.ANSWER)) {
                     val items = entries.filter { it.section == section }
                     after = Prompts.appendToSection(after, section, items.map { if (section == Prompts.THOUGHTS) "- ${it.day}: ${it.text}" else it.text })
