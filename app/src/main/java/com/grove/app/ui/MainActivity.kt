@@ -30,6 +30,7 @@ sealed interface Screen {
     data class EditHabit(val id: String?) : Screen
     data class EditTask(val id: String?, val date: String? = null, val time: String? = null) : Screen
     data class Day(val date: String) : Screen
+    data class EditTodo(val id: String?) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -94,7 +95,8 @@ class MainActivity : ComponentActivity() {
             Screen.Books -> BooksScreen(data, ::back)
             is Screen.HabitDetail -> HabitScreen(data, s.id, ::go, ::back)
             is Screen.EditHabit -> EditHabitScreen(data, s.id, ::back)
-            is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back)
+            is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back) { stack[stack.lastIndex] = Screen.EditTodo(null) }
+            is Screen.EditTodo -> EditTodoScreen(data, s.id, ::back)
             is Screen.Day -> DayScreen(data, s.date, ::go, ::back)
         }
         // Not while editing, so it never covers a form.

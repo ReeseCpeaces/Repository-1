@@ -136,6 +136,14 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                     }
                 }
             }
+            val todos = com.grove.app.data.Todos.shown(data)
+            item {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    SectionLabel("To-do · ${com.grove.app.data.Todos.open(data).size} open", GroveColors.Amber)
+                }
+            }
+            items(todos, key = { "d" + it.id }) { t -> TodoRow(data, t, go) }
+            item { AddTodoRow(go) }
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     SectionLabel("Wheel of the Year", GroveColors.Muted)
@@ -183,6 +191,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("New habit") }, onClick = { menu = false; go(Screen.EditHabit(null)) })
                 DropdownMenuItem(text = { Text("New task") }, onClick = { menu = false; go(Screen.EditTask(null)) })
+                DropdownMenuItem(text = { Text("New to-do (no date)") }, onClick = { menu = false; go(Screen.EditTodo(null)) })
             }
         }
     }

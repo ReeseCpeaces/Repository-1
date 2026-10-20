@@ -23,6 +23,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val KIND_TASK = "task"
         const val KIND_GOAL = "goal"
         const val KIND_CHECKIN = "checkin"
+        const val KIND_TODO = "todo"
 
         /** Shared by the snooze picker. */
         fun snooze(context: Context, kind: String, id: String, minutes: Int) {
@@ -53,7 +54,13 @@ class ReminderReceiver : BroadcastReceiver() {
                 Notifier.cancelCheckIn(context)
                 Store.update(context) { d ->
                     val now = LocalDateTime.now()
-                    if (kind == KIND_HABIT) {
+                    if (kind == KIND_TODO) {
+                        if (d.todos.firstOrNull { it.id == id }?.done?.isEmpty() == true) com.grove.app.data.Todos.toggle(d, id) else d
+                    } else if (kind == KIND_TODO) {
+            val t = data.todos.firstOrNull { it.id == id } ?: return
+            if (t.done.isNotEmpty()) return
+            Notifier.showReminder(context, kind, id, t.name, "To-do" + (if (t.due.isNotEmpty()) " · do by ${t.due}" else "") + (if (t.list.isNotEmpty()) " · ${t.list}" else ""), snooze)
+        } else if (kind == KIND_HABIT) {
                         val h = d.habits.firstOrNull { it.id == id }
                         if (h == null || Logic.isDoneToday(d, h)) d else Logic.toggleHabit(d, id, now)
                     } else {

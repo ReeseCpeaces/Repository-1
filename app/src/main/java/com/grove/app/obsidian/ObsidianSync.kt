@@ -27,7 +27,8 @@ object ObsidianSync {
         val earlier = if (old == null) emptySet() else (old.days.keys + new.days.keys)
             .filter { it != new.currentDay && old.days[it] != new.days[it] }.toSet()
         if (old != null && earlier.isEmpty() && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits &&
-            old.tasks == new.tasks && old.goals == new.goals && old.books == new.books) return
+            old.tasks == new.tasks && old.goals == new.goals && old.books == new.books &&
+            com.grove.app.data.Todos.doneOn(old, new.currentDay) == com.grove.app.data.Todos.doneOn(new, new.currentDay)) return
         // Read the latest data when the job runs, so queued jobs never write the same lines twice.
         worker.execute { runCatching { sync(context, Store.get(context), earlier) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
     }
@@ -70,6 +71,7 @@ object ObsidianSync {
             val at = rec.tasks[t.id]
             lines += "- [${if (at != null) "x" else " "}] ${t.name}${at?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}"
         }
+        for (t in com.grove.app.data.Todos.doneOn(data, day)) lines += "- [x] To-do: ${t.name}"
         for (g in data.goals) {
             val today = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day).let { if (it > 0) " (+$it pages today)" else "" }
             else if (Logic.sessionLogged(data, day, g)) " (session today)" else ""

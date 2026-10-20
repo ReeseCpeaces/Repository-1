@@ -261,6 +261,21 @@ def test_evening_check_in_and_quiet_hours():
         pass
 
 
+def test_todos():
+    g = Grove(make_vault())
+    t = g.add_todo("Renew registration", due="2026-11-30")
+    assert t["id"] == "d27"
+    g.add_todo("Call the vet", high=True)
+    text = g.overview()
+    assert "- [ ] ! Call the vet (id d28)" in text and "- [ ] Renew registration (id d27), by 2026-11-30" in text
+    g.update_todo("d28", done=True)
+    assert g.load_setup()["todos"][1]["done"] == "2026-10-15"
+    g.update_settings(todo_note_path="To-do.md")
+    assert "linked to To-do.md" in g.overview()
+    g.remove("to-do", "d27")
+    assert [x["id"] for x in g.load_setup()["todos"]] == ["d28"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

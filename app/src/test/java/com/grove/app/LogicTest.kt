@@ -317,4 +317,47 @@ class LogicTest {
         d = Logic.toggleHabit(d, "h2", LocalDateTime.parse("2026-10-19T22:00"))
         assertEquals(emptyList<Logic.OpenItem>(), Logic.checkInItems(d))
     }
+
+    // ----- floating to-dos -----
+
+    @Test fun todosStayUntilCheckedOffThenLeaveTheNextDay() {
+        var d = com.grove.app.data.Todos.add(migrated(), "Renew registration", due = "2026-11-30")
+        d = com.grove.app.data.Todos.add(d, "Call the vet", high = true)
+        assertEquals(listOf("Call the vet", "Renew registration"), com.grove.app.data.Todos.shown(d).map { it.name })
+        val vet = d.todos.first { it.name == "Call the vet" }.id
+        d = com.grove.app.data.Todos.toggle(d, vet)
+        assertEquals(listOf("Renew registration", "Call the vet"), com.grove.app.data.Todos.shown(d).map { it.name }) // crossed out, last
+        d = d.copy(currentDay = "2026-10-20")
+        assertEquals(listOf("Renew registration"), com.grove.app.data.Todos.shown(d).map { it.name })
+        assertTrue(Logic.checkInItems(d).none { it.label == "Renew registration" }) // not in the 9 PM check-in
+    }
+
+    @Test fun todoNoteStaysInStepBothWays() {
+        val note = "# To-do\n- [ ] Fix the gate\n- [x] Old thing ✅ 2026-10-01\n- [ ] Buy seeds 📅 2026-11-01\n\nNotes below\n"
+        var d = com.grove.app.data.Todos.add(migrated(), "Call the vet")
+        var (d1, text) = com.grove.app.data.Todos.syncNote(d, note)
+        // Note items join Grove (not the ticked old one); Grove's item joins the note after the last checklist line.
+        assertEquals(listOf("Call the vet", "Fix the gate", "Buy seeds"), d1.todos.map { it.name })
+        assertEquals("2026-11-01", d1.todos.first { it.name == "Buy seeds" }.due)
+        assertEquals("# To-do\n- [ ] Fix the gate\n- [x] Old thing ✅ 2026-10-01\n- [ ] Buy seeds 📅 2026-11-01\n- [ ] Call the vet\n\nNotes below\n", text)
+        assertEquals(d1 to text, com.grove.app.data.Todos.syncNote(d1, text).let { (a, b) -> a to b }) // stable
+        // Checked off in Grove -> ticked in the note.
+        d = com.grove.app.data.Todos.toggle(d1, d1.todos.first { it.name == "Fix the gate" }.id)
+        val (d2, text2) = com.grove.app.data.Todos.syncNote(d, text)
+        assertTrue(text2, text2.contains("- [x] Fix the gate ✅ 2026-10-19\n"))
+        // Ticked in Obsidian -> done in Grove; removed in Obsidian -> gone from Grove.
+        val edited = text2.replace("- [ ] Buy seeds", "- [x] Buy seeds").replace("- [ ] Call the vet\n", "")
+        val (d3, _) = com.grove.app.data.Todos.syncNote(d2, edited)
+        assertEquals("2026-10-19", d3.todos.first { it.name == "Buy seeds" }.done)
+        assertTrue(d3.todos.none { it.name == "Call the vet" })
+        // Deleted in Grove -> removed from the note.
+        val seeds = d3.todos.first { it.name == "Buy seeds" }
+        val reopened = com.grove.app.data.Todos.toggle(d3, seeds.id)
+        val (d4, text4) = com.grove.app.data.Todos.syncNote(reopened, edited)
+        assertTrue(text4, text4.contains("- [ ] Buy seeds 📅 2026-11-01\n"))
+        val (d5, text5) = com.grove.app.data.Todos.syncNote(com.grove.app.data.Todos.delete(d4, seeds.id), text4)
+        assertTrue(text5, !text5.contains("Buy seeds"))
+        assertTrue(d5.todos.none { it.name == "Buy seeds" })
+        text = text5
+    }
 }

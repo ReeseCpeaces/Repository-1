@@ -94,6 +94,28 @@ data class Goal(
 @Serializable
 data class Book(val id: String, val title: String, val pages: Int, val startPage: Int = 0, val piece: String = "", val notePath: String = "")
 
+/**
+ * A floating to-do: no date, stays on Today until it's checked off. [done] is the Grove day it was
+ * checked off ("" = open). When a to-do note is set, [inNote]/[noteName]/[noteDone] remember how the
+ * item looked in that note at the last sync, so changes on either side can be told apart.
+ */
+@Serializable
+data class Todo(
+    val id: String,
+    val name: String,
+    val list: String = "",
+    val high: Boolean = false,
+    /** Optional "do by" date, "yyyy-MM-dd". It still shows every day until done. */
+    val due: String = "",
+    /** Optional daily reminder time "HH:mm" until it's done. */
+    val remind: String = "",
+    val done: String = "",
+    val created: String = "",
+    val inNote: Boolean = false,
+    val noteName: String = "",
+    val noteDone: Boolean = false,
+)
+
 @Serializable
 data class HolyDay(val id: String, val name: String, val date: String, val detail: String)
 
@@ -119,6 +141,8 @@ data class Settings(
     /** No reminders, nags or nudges from [quietStart] until [quietEnd] by the clock (equal = no quiet hours). */
     val quietStart: String = "21:00",
     val quietEnd: String = "08:00",
+    /** Obsidian note whose checklist (- [ ] item) is kept in step with Grove's to-dos. "" = not linked. */
+    val todoNotePath: String = "",
 )
 
 /** What got done on one logical day. */
@@ -161,6 +185,9 @@ data class AppData(
     val lastBook: String = "",
     /** Ids of Grove/inbox entries (logs from the connector) already applied. */
     val appliedInbox: List<String> = emptyList(),
+    val todos: List<Todo> = emptyList(),
+    /** Names of linked to-dos deleted in Grove, to remove from the to-do note at the next sync. */
+    val todoDeleted: List<String> = emptyList(),
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

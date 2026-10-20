@@ -66,6 +66,21 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
   backup cutoff hour (default 2 PM). So Before-bed practice at 3 AM counts for the previous day.
+- **Floating to-dos** (`Todo` in `Models.kt`, rules in `data/Todos.kt`, UI in `ui/TodoScreens.kt`): no date;
+  shown in a "To-do" section on Today until checked off, crossed out for the rest of that day, then
+  hidden (pruned after 60 days). Optional list, high priority, "do by" date and daily reminder time.
+  Not in the 9 PM check-in. Done ones appear in that day's note summary as "- [x] To-do: …".
+  New via the + menu or the "To-do (no date)" chip in the new-task form. Ids use prefix "d".
+  - **Linked to an Obsidian note** (`Settings.todoNotePath`, e.g. "To-do.md"; `obsidian/TodoNote.kt`,
+    runs on one worker thread): the note's `- [ ]` checklist and Grove's to-dos stay in step both ways.
+    Each to-do remembers how it looked in the note at the last sync (`inNote`, `noteName`, `noteDone`),
+    so whichever side changed wins (the note if both did). Unticked note items join Grove; Grove's new
+    ones are added after the note's last checklist line; removed in the note = removed from Grove;
+    deleted in Grove = line removed (`AppData.todoDeleted`). Ticking writes `- [x] … ✅ yyyy-MM-dd`
+    (Tasks-plugin style); `📅 yyyy-MM-dd` in the note is read as the due date. Already-ticked note items
+    Grove never had are ignored. Lines in code fences are skipped. An unreadable note is never written.
+  - Connector: `grove_add_todo`, `grove_update_todo` (done=true checks off), `grove_remove_todo`,
+    `todo_note_path` in `grove_update_settings`; the connector only edits grove.json, the app does the note.
 - **Marking earlier days:** any day up to Grove's today can be checked off or undone later
   (`Logic.toggleHabit/toggleStep/toggleTask(..., day)`; future days are refused by `Logic.canMark`).
   Today shows a "Yesterday · not checked off" section; the habit page's 7-day strip is tappable; the Day

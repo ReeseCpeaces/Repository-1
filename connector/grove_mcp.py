@@ -25,7 +25,7 @@ target of pages left / weeks left until the deadline (weeks start Monday). Log t
 grove_log_session and grove_log_pages.
 Each book can be linked to its note in the vault's Books folder (notePath); Grove writes pagesRead,
 lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
-in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. Changes made
+in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off. Changes made
 here reach the phone through Syncthing and apply when the Grove app next opens, so mention that
 after editing. Times are 24-hour HH:MM. Call grove_overview first to see ids and today's state."""
 
@@ -153,6 +153,27 @@ def grove_update_book(book_id: str, title: str | None = None, pages: int | None 
 
 
 @mcp.tool()
+def grove_add_todo(name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None) -> str:
+    """Add a floating to-do: no date, it stays on Grove's Today until checked off (and in the linked Obsidian to-do note).
+    due: optional "do by" YYYY-MM-DD. remind: optional daily reminder time HH:MM until done."""
+    return _run(grove.add_todo, name, due, list_name, high, remind)
+
+
+@mcp.tool()
+def grove_update_todo(todo_id: str, name: str | None = None, due: str | None = None, list_name: str | None = None, high: bool | None = None,
+                      remind: str | None = None, done: bool | None = None, day: str | None = None) -> str:
+    """Change a to-do, or check it off with done=true (day defaults to Grove's today) / reopen it with done=false.
+    Use "" for due or remind to clear them."""
+    return _run(grove.update_todo, todo_id, name=name, due=due, list_name=list_name, high=high, remind=remind, done=done, day=day)
+
+
+@mcp.tool()
+def grove_remove_todo(todo_id: str) -> str:
+    """Delete a to-do (it's also removed from the linked Obsidian to-do note)."""
+    return _run(grove.remove, "to-do", todo_id)
+
+
+@mcp.tool()
 def grove_set_holy_day(name: str, date_on: str, detail: str, holy_id: str | None = None) -> str:
     """Add a holy day (or change one when holy_id is given). Grove adds a heads-up task 3 days before it."""
     return _run(grove.set_holy_day, name, date_on, detail, holy_id)
@@ -167,13 +188,15 @@ def grove_remove_holy_day(holy_id: str) -> str:
 @mcp.tool()
 def grove_update_settings(cutoff_hour: int | None = None, default_snooze_minutes: int | None = None, daily_note_path: str | None = None,
                           template_path: str | None = None, wolf_name: str | None = None, evening_check_in: bool | None = None,
-                          check_in_time: str | None = None, quiet_start: str | None = None, quiet_end: str | None = None) -> str:
+                          check_in_time: str | None = None, quiet_start: str | None = None, quiet_end: str | None = None,
+                          todo_note_path: str | None = None) -> str:
     """Change settings: cutoff_hour (backup hour a new day starts), default_snooze_minutes, the Obsidian daily note path or template path,
     evening_check_in (one notification at check_in_time listing what's still open), and quiet hours quiet_start-quiet_end
-    (HH:MM, by the clock; no reminders, repeats or nudges then; equal times turn quiet hours off)."""
+    (HH:MM, by the clock; no reminders, repeats or nudges then; equal times turn quiet hours off), and todo_note_path (the Obsidian
+    note, relative to the vault, whose "- [ ]" checklist the app keeps in step with Grove's to-dos; "" unlinks)."""
     return _run(grove.update_settings, cutoff_hour=cutoff_hour, default_snooze_minutes=default_snooze_minutes,
                 daily_note_path=daily_note_path, template_path=template_path, wolf_name=wolf_name, evening_check_in=evening_check_in,
-                check_in_time=check_in_time, quiet_start=quiet_start, quiet_end=quiet_end)
+                check_in_time=check_in_time, quiet_start=quiet_start, quiet_end=quiet_end, todo_note_path=todo_note_path)
 
 
 def main() -> None:

@@ -14,6 +14,7 @@ import com.grove.app.data.HolyDay
 import com.grove.app.data.Settings
 import com.grove.app.data.Store
 import com.grove.app.data.Task
+import com.grove.app.data.Todo
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.util.concurrent.Executors
@@ -30,6 +31,7 @@ data class SharedSetup(
     val goals: List<Goal>? = null,
     val books: List<Book>? = null,
     val nextId: Int? = null,
+    val todos: List<Todo>? = null,
 )
 
 /** A log written by the connector into Grove/inbox/, applied by the app and then deleted. */
@@ -76,7 +78,7 @@ object VaultSync {
         habits = data.habits, tasks = data.tasks, holyDays = data.holyDays,
         // The vault location is specific to this phone, so it's never shared.
         settings = data.settings.copy(vaultUri = ""),
-        goals = data.goals, books = data.books, nextId = data.nextId,
+        goals = data.goals, books = data.books, nextId = data.nextId, todos = data.todos,
     )
 
     private fun folder(context: Context, data: AppData): DocumentFile? {
@@ -171,6 +173,10 @@ object VaultSync {
                 settings = setup.settings.copy(vaultUri = d.settings.vaultUri),
                 goals = setup.goals ?: d.goals, books = setup.books ?: d.books,
                 nextId = maxOf(d.nextId, setup.nextId ?: 0),
+                todos = setup.todos ?: d.todos,
+                // Linked to-dos deleted in grove.json (say, by Claude) also leave the to-do note.
+                todoDeleted = d.todoDeleted + if (setup.todos == null) emptyList()
+                    else d.todos.filter { t -> t.inNote && setup.todos.none { it.id == t.id } }.map { it.noteName },
             )
         }
         return true
@@ -248,6 +254,10 @@ object VaultSync {
         `notePath` (the book's note in the vault, e.g. "Books/Michigan Snakes.md"; Grove links notes with
         `subType: Druid book` by title and writes `pagesRead`, `lastReadOn`, `read` and `finished` into them).
 
+        To-do fields (floating to-dos, no date): `id` ("d" + number from nextId), `name`, `list`, `high`, `due` (optional
+        "do by" date), `remind` (optional daily "HH:mm" until done), `done` (day it was checked off, "" = open),
+        `created`. Leave `inNote`, `noteName` and `noteDone` alone: they track the to-do note set in `todoNotePath`.
+
         `nextId`: the next number for new ids. Take ids from it (e.g. "t31", then set nextId to 32); never reuse an id.
 
         Logging pages, sessions or check-offs (for any past day) isn't done in this file: the Grove connector writes
@@ -257,6 +267,7 @@ object VaultSync {
 
         Settings: `dailyNotePath`, `templatePath`, `cutoffHour` (backup hour a new day starts),
         `defaultSnoozeMinutes`, `wolfName`, `booksFolder` (where the book notes are, default "Books"),
+        `todoNotePath` (Obsidian note whose `- [ ]` checklist is kept in step with the to-dos, "" = none),
         `linePromptOff` (habit/task ids, or "reading", that shouldn't ask "Add a line?"), `eveningCheckIn` (true/false)
         and `checkInTime` (one notification listing what's still open), `quietStart`/`quietEnd` (no reminders, repeats or
         nudges between them, by the clock; equal = off). Leave `vaultUri` empty;

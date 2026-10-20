@@ -58,7 +58,7 @@ import java.time.LocalDate
 private val DAY_LETTERS = listOf("S", "M", "T", "W", "T", "F", "S")
 private val NAG_CHOICES = listOf(5, 10, 15, 30, 60)
 
-private fun pickTime(context: Context, initial: String, onPick: (String) -> Unit) {
+fun pickTime(context: Context, initial: String, onPick: (String) -> Unit) {
     val (h, m) = initial.split(":").map { it.toInt() }
     TimePickerDialog(context, { _, hh, mm -> onPick("%02d:%02d".format(hh, mm)) }, h, m, false).show()
 }
@@ -116,7 +116,7 @@ fun EditHabitScreen(data: AppData, id: String?, back: () -> Unit) {
 }
 
 @Composable
-fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, back: () -> Unit) {
+fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, back: () -> Unit, toTodo: () -> Unit = {}) {
     val context = LocalContext.current
     val old = data.tasks.firstOrNull { it.id == id }
     var name by remember { mutableStateOf(old?.name.orEmpty()) }
@@ -155,7 +155,7 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
     }) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(list, { list = it }, label = { Text("List (Home, Druid Path…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        RepeatPicker(repeat) { repeat = it }
+        RepeatPicker(repeat, todoOption = old == null) { if (it == "todo") toTodo() else repeat = it }
         when (repeat) {
             "weekly" -> {
                 DayPicker("Repeats on", days)
@@ -201,10 +201,11 @@ private fun Form(title: String, back: () -> Unit, save: () -> Unit, onDelete: ((
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RepeatPicker(repeat: String, onPick: (String) -> Unit) {
+private fun RepeatPicker(repeat: String, todoOption: Boolean, onPick: (String) -> Unit) {
     Text("Repeat", fontWeight = FontWeight.SemiBold)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf("once" to "One time", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (key, label) ->
+        val options = listOf("once" to "One time", "weekly" to "Weekly", "monthly" to "Monthly") + if (todoOption) listOf("todo" to "To-do (no date)") else emptyList()
+        options.forEach { (key, label) ->
             FilterChip(selected = repeat == key, onClick = { onPick(key) }, label = { Text(label) })
         }
     }

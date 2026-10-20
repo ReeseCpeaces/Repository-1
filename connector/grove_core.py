@@ -459,6 +459,45 @@ class Grove:
             os.replace(tmp, path)
         return True
 
+    # ----- floating to-dos (same as Todos.kt; the app keeps them in step with the to-do note) -----
+
+    @staticmethod
+    def shown_todos(setup: dict, day: str) -> list[dict]:
+        todos = [t for t in setup.get("todos", []) if not t.get("done") or t.get("done") == day]
+        return sorted(todos, key=lambda t: (bool(t.get("done")), not t.get("high"), t.get("due") or "9999", t.get("created", "")))
+
+    def add_todo(self, name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None) -> dict:
+        if not name.strip():
+            raise GroveError("A to-do needs a name.")
+        setup, history = self.load_setup(), self.load_history()
+        t = {"id": self.new_id("d", setup), "name": name.strip(), "list": list_name.strip(), "high": high, "due": self.check_date(due) or "",
+             "remind": (self.check_times([remind]) or [""])[0] if remind else "", "done": "", "created": history["currentDay"],
+             "inNote": False, "noteName": "", "noteDone": False}
+        setup.setdefault("todos", []).append(t)
+        self.save_setup(setup)
+        return t
+
+    def update_todo(self, todo_id: str, name: str | None = None, due: str | None = None, list_name: str | None = None, high: bool | None = None,
+                    remind: str | None = None, done: bool | None = None, day: str | None = None) -> dict:
+        setup, history = self.load_setup(), self.load_history()
+        t = self.find(setup.get("todos", []), todo_id, "to-do")
+        if name is not None:
+            if not name.strip():
+                raise GroveError("A to-do needs a name.")
+            t["name"] = name.strip()
+        if due is not None:
+            t["due"] = self.check_date(due) if due else ""
+        if list_name is not None:
+            t["list"] = list_name.strip()
+        if high is not None:
+            t["high"] = high
+        if remind is not None:
+            t["remind"] = self.check_times([remind])[0] if remind else ""
+        if done is not None:
+            t["done"] = (self.check_date(day) or history["currentDay"]) if done else ""
+        self.save_setup(setup)
+        return t
+
     # ----- evening check-in and quiet hours (same as Logic.kt) -----
 
     DEFAULT_NOTIFY = {"eveningCheckIn": True, "checkInTime": "21:00", "quietStart": "21:00", "quietEnd": "08:00"}
@@ -527,6 +566,10 @@ class Grove:
         check = f"check-in at {ns['checkInTime']}" if ns["eveningCheckIn"] else "check-in off"
         open_items = self.check_in_items(setup, history)
         lines += ["", f"Notifications: {check}, quiet hours {quiet}. Still open today: {', '.join(open_items) or 'nothing'}"]
+        todos = self.shown_todos(setup, day)
+        lines += ["", f"To-dos (no date, until checked off){' · linked to ' + setup['settings']['todoNotePath'] if setup['settings'].get('todoNotePath') else ''}:"]
+        lines += [f"- [{'x' if t.get('done') else ' '}] {'! ' if t.get('high') else ''}{t['name']} (id {t['id']})"
+                  + (f", by {t['due']}" if t.get("due") else "") + (f", {t['list']}" if t.get("list") else "") for t in todos] or ["- none"]
         lines += ["", "Tasks today:"]
         tasks = self.tasks_on(setup, d)
         if not tasks:
@@ -605,7 +648,7 @@ class Grove:
     MIN_NEXT_ID = 27  # t15-t26 were handed out and removed before the counter existed
 
     def highest_id_number(self, setup: dict, history: dict) -> int:
-        ids = [x["id"] for key in ("habits", "tasks", "goals", "books") for x in setup.get(key, [])]
+        ids = [x["id"] for key in ("habits", "tasks", "goals", "books", "todos") for x in setup.get(key, [])]
         for rec in history.get("days", {}).values():
             ids += list(rec.get("steps", {})) + list(rec.get("tasks", {})) + rec.get("sessions", []) + list(rec.get("pages", {}))
         nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(r"[a-z](\d{1,7})", i))]
@@ -664,9 +707,9 @@ class Grove:
         return h
 
     def remove(self, kind: str, item_id: str) -> str:
-        key = {"habit": "habits", "task": "tasks", "holy day": "holyDays"}[kind]
+        key = {"habit": "habits", "task": "tasks", "holy day": "holyDays", "to-do": "todos"}[kind]
         setup = self.load_setup()
-        item = self.find(setup[key], item_id, kind)
+        item = self.find(setup.get(key, []), item_id, kind)
         if kind == "habit" and item.get("role"):
             raise GroveError(f"{item['name']} controls the day ({item['role']}); edit it instead of removing it.")
         setup[key] = [x for x in setup[key] if x["id"] != item_id]
@@ -746,7 +789,7 @@ class Grove:
         setup = self.load_setup()
         mapping = {"cutoff_hour": "cutoffHour", "default_snooze_minutes": "defaultSnoozeMinutes", "daily_note_path": "dailyNotePath",
                    "template_path": "templatePath", "wolf_name": "wolfName", "evening_check_in": "eveningCheckIn",
-                   "check_in_time": "checkInTime", "quiet_start": "quietStart", "quiet_end": "quietEnd"}
+                   "check_in_time": "checkInTime", "quiet_start": "quietStart", "quiet_end": "quietEnd", "todo_note_path": "todoNotePath"}
         for k in ("check_in_time", "quiet_start", "quiet_end"):
             if changes.get(k) is not None:
                 self.check_times([changes[k]])

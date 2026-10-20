@@ -51,6 +51,7 @@ object Migrate {
         // Its check-ins stay in history.
         val retired = d.goals.map { it.legacyHabit }.filter { it.isNotEmpty() }.toSet()
         if (d.habits.any { it.id in retired }) d = d.copy(habits = d.habits.filter { it.id !in retired })
+        d = Todos.prune(d)
         if (d.appliedInbox.size > 500) d = d.copy(appliedInbox = d.appliedInbox.takeLast(500))
         return d
     }

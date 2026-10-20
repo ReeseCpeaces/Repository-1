@@ -67,6 +67,11 @@ object AlarmScheduler {
             }
         }
 
+        // To-dos with a reminder: daily at that time until done.
+        for (t in com.grove.app.data.Todos.open(data)) {
+            if (t.remind.isNotEmpty()) schedule(ReminderReceiver.KIND_TODO, t.id, today, listOf(t.remind))
+        }
+
         // Weekly-goal nudges for the rest of this week, only while still under their threshold.
         val groveDay = Logic.groveToday(data)
         for (g in data.goals) {

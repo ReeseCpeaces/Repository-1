@@ -175,5 +175,6 @@ object Notifier {
     fun cancelFinishedReminders(context: Context, data: AppData) {
         data.habits.filter { Logic.isDoneToday(data, it) }.forEach { cancelReminder(context, ReminderReceiver.KIND_HABIT, it.id) }
         data.today.tasks.keys.forEach { cancelReminder(context, ReminderReceiver.KIND_TASK, it) }
+        data.todos.filter { it.done.isNotEmpty() }.forEach { cancelReminder(context, ReminderReceiver.KIND_TODO, it.id) }
     }
 }

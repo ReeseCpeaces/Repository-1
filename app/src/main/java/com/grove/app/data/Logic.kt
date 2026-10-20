@@ -240,7 +240,7 @@ object Logic {
 
     /** Highest number used in any id so far, in the setup or in history. */
     fun highestIdNumber(data: AppData): Int {
-        val ids = data.habits.map { it.id } + data.tasks.map { it.id } + data.goals.map { it.id } + data.books.map { it.id } +
+        val ids = data.habits.map { it.id } + data.tasks.map { it.id } + data.goals.map { it.id } + data.books.map { it.id } + data.todos.map { it.id } +
             data.days.values.flatMap { it.steps.keys + it.tasks.keys + it.sessions + it.pages.keys }
         return ids.mapNotNull { NUM.find(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
     }
