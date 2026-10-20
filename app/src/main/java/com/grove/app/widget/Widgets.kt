@@ -94,6 +94,7 @@ object Widgets {
         val work: suspend () -> Unit = {
             TodayWidget().updateAll(context)
             HolyDaysWidget().updateAll(context)
+            ListWidget().updateAll(context)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) CoroutineScope(Dispatchers.Default).launch { work() } else runBlocking { work() }
     }
@@ -105,7 +106,11 @@ class ToggleAction : ActionCallback {
         val id = parameters[Widgets.ID] ?: return
         val now = java.time.LocalDateTime.now()
         Store.update(context) { d ->
-            if (parameters[Widgets.KIND] == "habit") Logic.toggleHabit(d, id, now) else Logic.toggleTask(d, id, now)
+            when (parameters[Widgets.KIND]) {
+                "habit" -> Logic.toggleHabit(d, id, now)
+                "todo" -> com.grove.app.data.Todos.toggle(d, id)
+                else -> Logic.toggleTask(d, id, now)
+            }
         }
     }
 }
@@ -326,6 +331,57 @@ class HolyDaysWidget : GlanceAppWidget() {
             }
         }
     }
+}
+
+/**
+ * A slim list (4×1 and up) of today's tasks and the to-do list, with tick boxes. Scrolls; small type.
+ * "+" adds a to-do. Done items stay crossed out at the bottom for the rest of the day.
+ */
+class ListWidget : GlanceAppWidget() {
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        provideContent { Content(Store.get(context)) }
+    }
+
+    private data class Item(val kind: String, val id: String, val name: String, val detail: String, val done: Boolean, val high: Boolean)
+
+    @Composable
+    private fun Content(data: AppData) {
+        val day = Logic.groveToday(data)
+        val tasks = Logic.tasksOn(data, day).map {
+            Item("task", it.id, it.name, Logic.fmtTime(it.time), Logic.isTaskDone(data, data.currentDay, it.id), it.task?.high == true)
+        }
+        val todos = com.grove.app.data.Todos.shown(data).map { Item("todo", it.id, it.name, it.due.takeIf { d -> d.isNotEmpty() }?.let { d ->
+            Logic.date(d).let { x -> "by ${x.month.getDisplayName(JTextStyle.SHORT, Locale.US)} ${x.dayOfMonth}" } }.orEmpty(), it.done.isNotEmpty(), it.high) }
+        val rows = (tasks + todos).sortedBy { it.done }
+        val open = rows.count { !it.done }
+        val openApp = actionStartActivity<MainActivity>()
+        Column(GlanceModifier.fillMaxSize().background(BG).cornerRadius(16.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (open == 0) "All done" else "$open to do", GlanceModifier.defaultWeight().clickable(openApp), style(MUTED, 10, bold = true))
+                Text("+", GlanceModifier.width(28.dp).clickable(actionStartActivity<com.grove.app.ui.AddTodoActivity>()), style(GREEN, 16, bold = true, center = true))
+            }
+            LazyColumn(GlanceModifier.fillMaxSize()) {
+                items(rows.size) { i ->
+                    val r = rows[i]
+                    val color = if (r.kind == "task") AMBER else GREEN
+                    Row(GlanceModifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (r.done) "■" else "□",
+                            GlanceModifier.width(24.dp).clickable(actionRunCallback<ToggleAction>(actionParametersOf(Widgets.KIND to r.kind, Widgets.ID to r.id))),
+                            style(color, 15, center = true),
+                        )
+                        Text((if (r.high) "! " else "") + r.name, GlanceModifier.defaultWeight().clickable(openApp),
+                            style(if (r.done) MUTED else TEXT, 12, strike = r.done), maxLines = 1)
+                        if (r.detail.isNotEmpty()) Text(r.detail, style = style(MUTED, 10))
+                    }
+                }
+            }
+        }
+    }
+}
+
+class ListWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = ListWidget()
 }
 
 class TodayWidgetReceiver : GlanceAppWidgetReceiver() {

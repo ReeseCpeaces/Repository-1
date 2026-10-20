@@ -5,4 +5,7 @@
     <string name="widget_today_desc">Month calendar with today\'s habits and tasks</string>
     <string name="widget_holy">Grove: Wheel of the Year</string>
     <string name="widget_holy_desc">Upcoming holy days with countdowns</string>
+    <string name="widget_list">Grove: tasks and to-dos</string>
+    <string name="widget_list_desc">Slim scrolling list of today\'s tasks and your to-dos, with tick boxes</string>
+    <string name="share_todo">Grove to-do</string>
 </resources>

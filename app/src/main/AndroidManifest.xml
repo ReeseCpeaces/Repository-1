@@ -59,6 +59,34 @@
                 android:resource="@xml/today_widget" />
         </receiver>
 
+        <!-- Share text from any app ("Share" > "Grove to-do"); also the widget's "+". -->
+        <activity
+            android:name=".ui.AddTodoActivity"
+            android:exported="true"
+            android:label="@string/share_todo"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Grove.Dialog"
+            android:windowSoftInputMode="adjustResize|stateVisible">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".widget.ListWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_list">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/list_widget" />
+        </receiver>
+
         <receiver
             android:name=".widget.HolyDaysWidgetReceiver"
             android:exported="true"

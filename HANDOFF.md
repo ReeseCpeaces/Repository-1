@@ -102,6 +102,10 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - **Starting the day early:** checking off Morning practice once the calendar is past Grove's day always
   starts the new day (`Logic.toggleHabit`), even if the previous day's Morning practice shows as done.
   Today and the Day view show "Start <day> now" (`Logic.startNewDay`) while Grove is still on yesterday.
+- **List widget** (`ListWidget` in `widget/Widgets.kt`, 4×1, resizable): today's tasks and the to-dos with
+  tick boxes, small type, scrolls; done items crossed out at the bottom; "+" opens `AddTodoActivity`.
+- **Share to Grove** (`ui/AddTodoActivity.kt`): "Share → Grove to-do" from any app (text/plain) opens a small
+  box prefilled with the text (subject + text); with several lines it can add one to-do per line.
 - **Marking earlier days:** any day up to Grove's today can be checked off or undone later
   (`Logic.toggleHabit/toggleStep/toggleTask(..., day)`; future days are refused by `Logic.canMark`).
   Today shows a "Yesterday · not checked off" section; the habit page's 7-day strip is tappable; the Day
