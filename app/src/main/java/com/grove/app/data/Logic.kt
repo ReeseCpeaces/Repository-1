@@ -472,4 +472,34 @@ object Logic {
 
     fun markLinesWritten(data: AppData, day: String, n: Int): AppData =
         if (!data.days.containsKey(day)) data else withDay(data, day) { r -> r.copy(linesWritten = maxOf(r.linesWritten, n)) }
+
+    // ----- evening check-in and quiet hours -----
+
+    private fun minutes(hhmm: String): Int = hhmm.split(":").let { it[0].toInt() * 60 + it[1].toInt() }
+
+    /** Quiet hours go by the clock, wrapping past midnight (21:00–08:00). Start == end means none. */
+    fun inQuietHours(s: Settings, t: java.time.LocalTime): Boolean {
+        val start = minutes(s.quietStart)
+        val end = minutes(s.quietEnd)
+        val m = t.hour * 60 + t.minute
+        return when {
+            start == end -> false
+            start < end -> m in start until end
+            else -> m >= start || m < end
+        }
+    }
+
+    /** Something the evening check-in lists: [kind] is "habit" or "task". */
+    data class OpenItem(val kind: String, val id: String, val label: String)
+
+    /** What's still not done in Grove's day: habits (but not Morning practice) and tasks. */
+    fun checkInItems(data: AppData): List<OpenItem> {
+        val day = groveToday(data)
+        val open = data.habits.filter { it.role != Role.MORNING && scheduledOn(it, day) && !isDone(data, data.currentDay, it) }
+        val (bedtime, habits) = open.partition { it.role == Role.BEDTIME }
+        val tasks = tasksOn(data, day).filter { !isTaskDone(data, data.currentDay, it.id) }
+        // Before-bed practice goes last: it's meant for later.
+        return habits.map { OpenItem("habit", it.id, it.name) } + tasks.map { OpenItem("task", it.id, it.name) } +
+            bedtime.map { OpenItem("habit", it.id, "${it.name} (when you go to bed)") }
+    }
 }

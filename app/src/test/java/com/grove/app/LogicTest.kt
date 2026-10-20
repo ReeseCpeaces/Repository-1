@@ -297,4 +297,24 @@ class LogicTest {
         assertEquals(true, com.grove.app.obsidian.ObsidianSync.properties(d, "2026-10-21")["fifteen in nature"])
         assertEquals(false, com.grove.app.obsidian.ObsidianSync.properties(d)["fifteen in nature"])
     }
+
+    // ----- evening check-in and quiet hours -----
+
+    @Test fun quietHoursWrapPastMidnight() {
+        val s = com.grove.app.data.Settings()
+        val quiet = listOf("20:59", "21:00", "23:30", "00:30", "07:59", "08:00").map { Logic.inQuietHours(s, java.time.LocalTime.parse(it)) }
+        assertEquals(listOf(false, true, true, true, true, false), quiet)
+        assertTrue(!Logic.inQuietHours(s.copy(quietStart = "08:00"), java.time.LocalTime.parse("23:00"))) // start == end: off
+        assertTrue(Logic.inQuietHours(s.copy(quietStart = "13:00", quietEnd = "14:00"), java.time.LocalTime.parse("13:30")))
+    }
+
+    @Test fun eveningCheckInListsWhatsOpenButNotMorningPractice() {
+        var d = migrated() // Monday Oct 19: Laundry (t1) is due
+        assertEquals(listOf("15-min house reset", "Laundry", "Before-bed practice (when you go to bed)"), Logic.checkInItems(d).map { it.label })
+        d = Logic.toggleHabit(d, "h3", LocalDateTime.parse("2026-10-19T15:00"))
+        d = Logic.toggleTask(d, "t1", LocalDateTime.parse("2026-10-19T16:00"))
+        assertEquals(listOf("h2"), Logic.checkInItems(d).map { it.id })
+        d = Logic.toggleHabit(d, "h2", LocalDateTime.parse("2026-10-19T22:00"))
+        assertEquals(emptyList<Logic.OpenItem>(), Logic.checkInItems(d))
+    }
 }

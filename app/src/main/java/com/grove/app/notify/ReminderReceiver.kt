@@ -22,11 +22,12 @@ class ReminderReceiver : BroadcastReceiver() {
         const val KIND_HABIT = "habit"
         const val KIND_TASK = "task"
         const val KIND_GOAL = "goal"
+        const val KIND_CHECKIN = "checkin"
 
         /** Shared by the snooze picker. */
         fun snooze(context: Context, kind: String, id: String, minutes: Int) {
             Notifier.cancelReminder(context, kind, id)
-            AlarmScheduler.scheduleFollowUp(context, kind, id, minutes)
+            AlarmScheduler.scheduleFollowUp(context, kind, id, minutes, Store.get(context))
         }
     }
 
@@ -49,6 +50,7 @@ class ReminderReceiver : BroadcastReceiver() {
             ACTION_DONE -> {
                 AlarmScheduler.cancelFollowUp(context, kind, id)
                 Notifier.cancelReminder(context, kind, id)
+                Notifier.cancelCheckIn(context)
                 Store.update(context) { d ->
                     val now = LocalDateTime.now()
                     if (kind == KIND_HABIT) {
@@ -71,6 +73,12 @@ class ReminderReceiver : BroadcastReceiver() {
         Store.refreshDay(context)
         val data = Store.get(context)
         val snooze = data.settings.defaultSnoozeMinutes
+        if (kind == KIND_CHECKIN) {
+            if (data.settings.eveningCheckIn) Notifier.showCheckIn(context, Logic.checkInItems(data))
+            return
+        }
+        // Nothing during quiet hours (this also catches alarms set before the hours changed).
+        if (Logic.inQuietHours(data.settings, LocalDateTime.now().toLocalTime())) return
         if (kind == KIND_GOAL) {
             val g = data.goals.firstOrNull { it.id == id } ?: return
             // Snoozed nudges fire on the same day; a plain nudge only if its threshold isn't met yet.
@@ -90,12 +98,12 @@ class ReminderReceiver : BroadcastReceiver() {
             val streak = Logic.streak(data, h)
             val text = h.steps.joinToString(" · ") { it.label } + if (streak > 0) "  ·  $streak-day streak" else ""
             Notifier.showReminder(context, kind, id, h.name, text, snooze)
-            if (h.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, h.nagMinutes)
+            if (h.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, h.nagMinutes, data)
         } else {
             val t = data.tasks.firstOrNull { it.id == id } ?: return
             if (Logic.isTaskDone(data, data.currentDay, id)) return
             Notifier.showReminder(context, kind, id, t.name, "Due ${Logic.fmtTime(t.time)} · ${t.list}", snooze)
-            if (t.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, t.nagMinutes)
+            if (t.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, t.nagMinutes, data)
         }
     }
 }

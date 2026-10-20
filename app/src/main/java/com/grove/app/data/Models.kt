@@ -113,6 +113,12 @@ data class Settings(
     val booksFolder: String = "Books",
     /** Things that shouldn't ask "Add a line?" when checked off: habit/task ids, or "reading". */
     val linePromptOff: List<String> = emptyList(),
+    /** One notification at [checkInTime] listing what's still open in Grove's day. */
+    val eveningCheckIn: Boolean = true,
+    val checkInTime: String = "21:00",
+    /** No reminders, nags or nudges from [quietStart] until [quietEnd] by the clock (equal = no quiet hours). */
+    val quietStart: String = "21:00",
+    val quietEnd: String = "08:00",
 )
 
 /** What got done on one logical day. */

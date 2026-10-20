@@ -49,7 +49,7 @@ object AlarmScheduler {
             for (t in times) {
                 val (h, m) = t.split(":").map { it.toInt() }
                 val at = date.atTime(h, m)
-                if (!at.isAfter(now)) continue
+                if (!at.isAfter(now) || Logic.inQuietHours(data.settings, at.toLocalTime())) continue
                 val code = "rem|$kind|$id|$date|$t".hashCode()
                 codes += code
                 setExact(context, at, fireIntent(context, code, kind, id))
@@ -76,10 +76,21 @@ object AlarmScheduler {
                 if (Logic.progress(data, g, date) >= Logic.target(data, g, date) * n.below) continue
                 val (h, m) = n.time.split(":").map { it.toInt() }
                 val at = date.atTime(h, m)
-                if (!at.isAfter(now)) continue
+                if (!at.isAfter(now) || Logic.inQuietHours(data.settings, at.toLocalTime())) continue
                 val code = "nudge|${g.id}|$date|${n.time}".hashCode()
                 codes += code
                 setExact(context, at, fireIntent(context, code, ReminderReceiver.KIND_GOAL, g.id))
+            }
+        }
+
+        // The evening check-in: the last notification of the day, even though quiet hours start then.
+        if (data.settings.eveningCheckIn) {
+            val (h, m) = data.settings.checkInTime.split(":").map { it.toInt() }
+            val at = today.atTime(h, m)
+            if (at.isAfter(now)) {
+                val code = "checkin|$today".hashCode()
+                codes += code
+                setExact(context, at, fireIntent(context, code, ReminderReceiver.KIND_CHECKIN, ""))
             }
         }
 
@@ -107,10 +118,14 @@ object AlarmScheduler {
 
     private fun followUpCode(kind: String, id: String) = "follow|$kind|$id".hashCode()
 
-    /** One-off alarm for a snooze or a "keep reminding" repeat. Replaces any earlier follow-up. */
-    fun scheduleFollowUp(context: Context, kind: String, id: String, minutes: Int) {
-        val code = followUpCode(kind, id)
-        setExact(context, LocalDateTime.now().plusMinutes(minutes.toLong()), fireIntent(context, code, kind, id))
+    /**
+     * One-off alarm for a snooze or a "keep reminding" repeat. Replaces any earlier follow-up.
+     * One that would land in quiet hours is dropped, not saved for the morning.
+     */
+    fun scheduleFollowUp(context: Context, kind: String, id: String, minutes: Int, data: AppData) {
+        val at = LocalDateTime.now().plusMinutes(minutes.toLong())
+        if (Logic.inQuietHours(data.settings, at.toLocalTime())) { cancelFollowUp(context, kind, id); return }
+        setExact(context, at, fireIntent(context, followUpCode(kind, id), kind, id))
     }
 
     fun cancelFollowUp(context: Context, kind: String, id: String) {

@@ -244,6 +244,23 @@ def test_mark_done_on_an_earlier_day():
         pass
 
 
+def test_evening_check_in_and_quiet_hours():
+    g = Grove(make_vault())  # Thursday Oct 15: Trash due, Read not done, Morning practice not done
+    ns = g.notify_settings(g.load_setup())
+    assert ns == {"eveningCheckIn": True, "checkInTime": "21:00", "quietStart": "21:00", "quietEnd": "08:00"}
+    assert [g.in_quiet_hours(ns, t) for t in ("20:59", "21:00", "23:30", "00:30", "07:59", "08:00")] == [False, True, True, True, True, False]
+    assert g.check_in_items(g.load_setup(), g.load_history()) == ["Read", "Trash"]  # never Morning practice
+    assert "Still open today: Read, Trash" in g.overview()
+    g.update_settings(quiet_start="22:00", quiet_end="22:00", evening_check_in=False)
+    assert not g.in_quiet_hours(g.notify_settings(g.load_setup()), "23:00")
+    assert "check-in off, quiet hours off" in g.overview()
+    try:
+        g.update_settings(quiet_end="8am")
+        raise AssertionError("expected GroveError")
+    except GroveError:
+        pass
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

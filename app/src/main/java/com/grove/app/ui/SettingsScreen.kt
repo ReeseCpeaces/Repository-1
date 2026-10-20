@@ -108,6 +108,34 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                 }
             }
 
+            SectionLabel("Evening & quiet hours", GroveColors.Green)
+            SwitchRow("Evening check-in", "One notification listing what's still open today. None if everything's done.", s.eveningCheckIn) { on ->
+                saveSettings { it.copy(eveningCheckIn = on) }
+            }
+            if (s.eveningCheckIn) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("20:00", "20:30", "21:00", "21:30", "22:00").forEach { t ->
+                        FilterChip(selected = s.checkInTime == t, onClick = { saveSettings { it.copy(checkInTime = t) } }, label = { Text(Logic.fmtTime(t)) })
+                    }
+                }
+            }
+            Text("Quiet hours: no reminders, repeats or nudges. Repeats that would land in them are dropped.", fontSize = 13.sp)
+            Text("Starts", fontSize = 12.sp, color = GroveColors.Muted)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("20:00", "21:00", "22:00", "23:00").forEach { t ->
+                    FilterChip(selected = s.quietStart == t && s.quietStart != s.quietEnd, onClick = { saveSettings { it.copy(quietStart = t) } }, label = { Text(Logic.fmtTime(t)) })
+                }
+                FilterChip(selected = s.quietStart == s.quietEnd, onClick = { saveSettings { it.copy(quietStart = it.quietEnd) } }, label = { Text("Off") })
+            }
+            Text("Ends", fontSize = 12.sp, color = GroveColors.Muted)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("06:00", "07:00", "08:00", "09:00").forEach { t ->
+                    FilterChip(selected = s.quietEnd == t && s.quietStart != s.quietEnd, onClick = {
+                        saveSettings { it.copy(quietEnd = t, quietStart = if (it.quietStart == it.quietEnd) "21:00" else it.quietStart) }
+                    }, label = { Text(Logic.fmtTime(t)) })
+                }
+            }
+
             SectionLabel("Keep reminders reliable", GroveColors.Amber)
             Text("Samsung puts apps to sleep to save battery, which can delay reminders. Allow Grove to run unrestricted, and add it to Never sleeping apps (Settings › Battery › Background usage limits).",
                 fontSize = 13.sp, color = GroveColors.Muted)

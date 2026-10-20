@@ -143,6 +143,31 @@ object Notifier {
         NotificationManagerCompat.from(context).notify(nid, n)
     }
 
+    private const val CHECKIN_ID = 2
+
+    /** The evening check-in: one notification listing what's still open. Nothing if all is done. */
+    fun showCheckIn(context: Context, items: List<Logic.OpenItem>) {
+        if (!allowed(context) || items.isEmpty()) return
+        val text = "Still open today: " + items.joinToString(", ") { it.label }
+        val b = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_stat_grove)
+            .setContentTitle(if (items.size == 1) "One thing left today" else "${items.size} things left today")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, 200))
+        items.singleOrNull()?.let { only ->
+            b.addAction(0, "Done", receiver(context, 201, ReminderReceiver.ACTION_DONE) {
+                putExtra(ReminderReceiver.EXTRA_KIND, only.kind)
+                putExtra(ReminderReceiver.EXTRA_ID, only.id)
+            })
+        }
+        NotificationManagerCompat.from(context).notify(CHECKIN_ID, b.build())
+    }
+
+    fun cancelCheckIn(context: Context) = NotificationManagerCompat.from(context).cancel(CHECKIN_ID)
+
     fun cancelReminder(context: Context, kind: String, id: String) =
         NotificationManagerCompat.from(context).cancel(reminderId(kind, id))
 

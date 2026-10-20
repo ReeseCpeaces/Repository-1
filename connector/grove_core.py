@@ -459,6 +459,33 @@ class Grove:
             os.replace(tmp, path)
         return True
 
+    # ----- evening check-in and quiet hours (same as Logic.kt) -----
+
+    DEFAULT_NOTIFY = {"eveningCheckIn": True, "checkInTime": "21:00", "quietStart": "21:00", "quietEnd": "08:00"}
+
+    def notify_settings(self, setup: dict) -> dict:
+        return {**self.DEFAULT_NOTIFY, **{k: v for k, v in setup.get("settings", {}).items() if k in self.DEFAULT_NOTIFY}}
+
+    @staticmethod
+    def in_quiet_hours(settings: dict, hhmm: str) -> bool:
+        """By the clock, wrapping past midnight (21:00-08:00). Start == end means no quiet hours."""
+        mins = lambda t: int(t[:2]) * 60 + int(t[3:5])
+        start, end, m = mins(settings["quietStart"]), mins(settings["quietEnd"]), mins(hhmm)
+        if start == end:
+            return False
+        return start <= m < end if start < end else (m >= start or m < end)
+
+    def check_in_items(self, setup: dict, history: dict) -> list[str]:
+        """What the evening check-in lists: open habits (not Morning practice; Before-bed last) and tasks."""
+        day = history["currentDay"]
+        d = date.fromisoformat(day)
+        rec = history.get("days", {}).get(day, {})
+        open_habits = [h for h in setup["habits"] if h.get("role") != "morning" and self.scheduled(h, d) and not self.is_done(history, day, h)]
+        habits = [h["name"] for h in open_habits if h.get("role") != "bedtime"]
+        bedtime = [f"{h['name']} (when you go to bed)" for h in open_habits if h.get("role") == "bedtime"]
+        tasks = [t["name"] for t in self.tasks_on(setup, d) if t["id"] not in rec.get("tasks", {})]
+        return habits + tasks + bedtime
+
     # ----- reports -----
 
     def overview(self) -> str:
@@ -495,6 +522,11 @@ class Grove:
                 page = self.book_page(history, b)
                 lines.append(f"- {b['id']} {b['title']}: {page}/{b['pages']}" + (" (finished)" if page >= b["pages"] else "")
                              + (f", note: {b['notePath']}" if b.get("notePath") else ", no note linked"))
+        ns = self.notify_settings(setup)
+        quiet = "off" if ns["quietStart"] == ns["quietEnd"] else f"{ns['quietStart']}-{ns['quietEnd']}"
+        check = f"check-in at {ns['checkInTime']}" if ns["eveningCheckIn"] else "check-in off"
+        open_items = self.check_in_items(setup, history)
+        lines += ["", f"Notifications: {check}, quiet hours {quiet}. Still open today: {', '.join(open_items) or 'nothing'}"]
         lines += ["", "Tasks today:"]
         tasks = self.tasks_on(setup, d)
         if not tasks:
@@ -713,7 +745,11 @@ class Grove:
     def update_settings(self, **changes) -> dict:
         setup = self.load_setup()
         mapping = {"cutoff_hour": "cutoffHour", "default_snooze_minutes": "defaultSnoozeMinutes", "daily_note_path": "dailyNotePath",
-                   "template_path": "templatePath", "wolf_name": "wolfName"}
+                   "template_path": "templatePath", "wolf_name": "wolfName", "evening_check_in": "eveningCheckIn",
+                   "check_in_time": "checkInTime", "quiet_start": "quietStart", "quiet_end": "quietEnd"}
+        for k in ("check_in_time", "quiet_start", "quiet_end"):
+            if changes.get(k) is not None:
+                self.check_times([changes[k]])
         for k, v in changes.items():
             if v is not None and k in mapping:
                 setup["settings"][mapping[k]] = v

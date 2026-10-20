@@ -166,10 +166,14 @@ def grove_remove_holy_day(holy_id: str) -> str:
 
 @mcp.tool()
 def grove_update_settings(cutoff_hour: int | None = None, default_snooze_minutes: int | None = None, daily_note_path: str | None = None,
-                          template_path: str | None = None, wolf_name: str | None = None) -> str:
-    """Change settings: cutoff_hour (backup hour a new day starts), default_snooze_minutes, the Obsidian daily note path or template path."""
+                          template_path: str | None = None, wolf_name: str | None = None, evening_check_in: bool | None = None,
+                          check_in_time: str | None = None, quiet_start: str | None = None, quiet_end: str | None = None) -> str:
+    """Change settings: cutoff_hour (backup hour a new day starts), default_snooze_minutes, the Obsidian daily note path or template path,
+    evening_check_in (one notification at check_in_time listing what's still open), and quiet hours quiet_start-quiet_end
+    (HH:MM, by the clock; no reminders, repeats or nudges then; equal times turn quiet hours off)."""
     return _run(grove.update_settings, cutoff_hour=cutoff_hour, default_snooze_minutes=default_snooze_minutes,
-                daily_note_path=daily_note_path, template_path=template_path, wolf_name=wolf_name)
+                daily_note_path=daily_note_path, template_path=template_path, wolf_name=wolf_name, evening_check_in=evening_check_in,
+                check_in_time=check_in_time, quiet_start=quiet_start, quiet_end=quiet_end)
 
 
 def main() -> None:

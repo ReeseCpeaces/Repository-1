@@ -74,6 +74,15 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   updated too (only if it exists). The connector's `grove_mark_done(item, day, done)` does the same
   through the inbox (`type` "habit"/"task", `item`, `done`).
 - **Reminders:** exact alarms, Done / Snooze N min / "Snooze…" picker (5 min–2 h); repeats until done.
+- **Fewer notifications (Oct 19):** Reese's grove.json now has one reminder per item at its due time and
+  `nag: false`, except t6 trash, t14 Zepbound, t15 Taltz (`nagMinutes: 90`). Don't turn nagging back on.
+  - **Evening check-in** (`Settings.eveningCheckIn`, `checkInTime` 21:00): one notification listing what's
+    still open in Grove's day (`Logic.checkInItems`: habits except Morning practice, tasks, Before-bed last
+    as "(when you go to bed)"). Nothing if all done. Tap opens Today; a Done button only with exactly one item.
+  - **Quiet hours** (`quietStart` 21:00 – `quietEnd` 08:00, by the clock, wraps midnight, equal = off;
+    `Logic.inQuietHours`): no reminders, repeats or nudges. Alarms in quiet hours aren't scheduled,
+    repeats/snoozes that would land in them are dropped (not moved to morning), and anything firing then
+    is ignored. The check-in is exempt. The pinned notification is silent and stays.
 - **Pinned notification:** today's habits with a check-off button for the next one; reposts if swiped.
 - **Widgets (Glance):** calendar + today (dots on days with tasks, month arrows, tap a day to see its
   tasks, tap the heading to open the Day view); Wheel of the Year.

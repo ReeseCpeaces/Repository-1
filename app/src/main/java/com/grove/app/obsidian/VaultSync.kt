@@ -257,7 +257,9 @@ object VaultSync {
 
         Settings: `dailyNotePath`, `templatePath`, `cutoffHour` (backup hour a new day starts),
         `defaultSnoozeMinutes`, `wolfName`, `booksFolder` (where the book notes are, default "Books"),
-        `linePromptOff` (habit/task ids, or "reading", that shouldn't ask "Add a line?"). Leave `vaultUri` empty;
+        `linePromptOff` (habit/task ids, or "reading", that shouldn't ask "Add a line?"), `eveningCheckIn` (true/false)
+        and `checkInTime` (one notification listing what's still open), `quietStart`/`quietEnd` (no reminders, repeats or
+        nudges between them, by the clock; equal = off). Leave `vaultUri` empty;
         it's set on the phone.
     """.trimIndent() + "\n"
 }
