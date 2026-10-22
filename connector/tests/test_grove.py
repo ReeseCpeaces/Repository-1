@@ -316,6 +316,45 @@ def test_my_deepest_me_prompts():
         pass
 
 
+PLANT_NOTE = """# Plant Study
+
+| # | Plant |
+|---|---|
+| 1 | White pine |
+
+## Session log
+- 2026-10-20 · White pine · (min:: 30) · sat by the big one
+
+## Season plan
+keep this
+"""
+
+
+def test_plant_study_sessions():
+    g = goal_vault()  # Monday 2026-10-19
+    setup = g.load_setup()
+    setup["goals"].append({"id": "g46", "name": "Druid exploration", "kind": "minutes", "deadline": "2027-06-21", "total": 1200,
+                           "created": "2026-10-22", "nudges": [{"weekday": 6, "time": "15:00", "below": 1.0}]})
+    setup["plants"] = [{"id": "p47", "name": "White pine", "latin": "Pinus strobus"}, {"id": "p48", "name": "Staghorn sumac", "latin": "Rhus typhina"}]
+    g.save_setup(setup)
+    note = g.vault / "Druidry/Druid Exploration - Plant Study.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(PLANT_NOTE)
+    history = json.loads(g.history_path.read_text())
+    history["currentDay"] = "2026-10-22"
+    g.history_path.write_text(json.dumps(history))
+    assert "Logged: 2026-10-22 · Staghorn sumac · (min:: 45) · red fruit, cold wind" in g.log_exploration("sumac", 45, "red fruit,\n cold wind")
+    text = note.read_text()
+    assert "## Session log\n- 2026-10-20 · White pine · (min:: 30) · sat by the big one\n- 2026-10-22 · Staghorn sumac · (min:: 45) · red fruit, cold wind\n\n## Season plan\nkeep this\n" in text
+    assert "| 1 | White pine |" in text
+    over = g.overview()
+    assert "Druid exploration (id g46): 75 / 35 min this week, 1.2 of 20 h" in over and "White pine 30 min, Staghorn sumac 45 min" in over
+    assert g.exploration_log("pine").startswith("- 2026-10-20 · White pine · 30 min · sat by the big one")
+    note.write_text(note.read_text() + "")
+    (g.vault / "Druidry/Druid Exploration - Plant Study.sync-conflict-20261022-101010-ABCDEFG.md").write_text("## Session log\n- 2026-10-21 · X · (min:: 999)\n")
+    assert "75 / 35" in g.overview()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

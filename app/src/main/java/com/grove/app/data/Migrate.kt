@@ -64,6 +64,21 @@ object Migrate {
         // t12 ("My Deepest Me: start this week's prompt") stays gone, even if an older grove.json brings it back.
         if (d.migratedPrompt && d.tasks.any { it.id == "t12" }) d = d.copy(tasks = d.tasks.filter { it.id != "t12" })
         d = Prompts.advance(d)
+        // Oct 2026: Druid exploration (plant study), 20 hours by the 2027 summer solstice.
+        if (!d.migratedExplore) {
+            if (d.goals.none { it.kind == GoalKind.MINUTES }) {
+                val (id, next) = Logic.allocateId(d, "g")
+                d = next.copy(goals = next.goals + Goal(
+                    id, "Druid exploration", GoalKind.MINUTES, deadline = "2027-06-21",
+                    nudges = listOf(Nudge(6, "15:00", 1.0)), created = d.currentDay.ifEmpty { "2026-10-22" }, total = 1200,
+                ))
+            }
+            if (d.plants.isEmpty()) for (p in Explore.PLANTS) {
+                val (id, next) = Logic.allocateId(d, "p")
+                d = next.copy(plants = next.plants + p.copy(id = id))
+            }
+            d = d.copy(migratedExplore = true)
+        }
         if (d.promptQueue.size > 200) d = d.copy(promptQueue = d.promptQueue.takeLast(200))
         // A habit replaced by a goal stays retired, even if an older grove.json brings it back.
         // Its check-ins stay in history.

@@ -4,6 +4,7 @@ import android.content.Context
 import com.grove.app.notify.AlarmScheduler
 import com.grove.app.notify.Notifier
 import com.grove.app.obsidian.BookNotes
+import com.grove.app.obsidian.ExploreNote
 import com.grove.app.obsidian.ObsidianSync
 import com.grove.app.obsidian.PromptNotes
 import com.grove.app.obsidian.TodoNote
@@ -22,6 +23,7 @@ object Effects {
         BookNotes.syncAsync(context, old, new)
         TodoNote.syncAsync(context, old, new)
         PromptNotes.syncAsync(context, old, new)
+        ExploreNote.syncAsync(context, old, new)
     }
 
     /** Full refresh after boot, an app update, or opening the app. Call off the main thread. */
@@ -36,6 +38,8 @@ object Effects {
         TodoNote.syncAsync(context, null, Store.get(context))
         // Create this week's prompt note and write any waiting thoughts.
         PromptNotes.syncAsync(context, null, Store.get(context))
+        // Pick up plant-study sessions added in the note by hand or by Claude.
+        ExploreNote.syncAsync(context, null, Store.get(context))
         Store.refreshDay(context)
         val data = Store.get(context)
         Notifier.showPinned(context, data)

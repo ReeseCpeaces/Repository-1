@@ -93,6 +93,10 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
             OutlinedTextField(todoNote, { todoNote = it; saveSettings { st -> st.copy(todoNotePath = it.trim()) } },
                 label = { Text("To-do note") }, supportingText = { Text("e.g. To-do.md. Its \"- [ ]\" checklist and Grove's to-dos stay in step both ways. Empty = not linked.") },
                 modifier = Modifier.fillMaxWidth())
+            var plantNote by remember { mutableStateOf(s.plantStudyNotePath) }
+            OutlinedTextField(plantNote, { plantNote = it; saveSettings { st -> st.copy(plantStudyNotePath = it.trim()) } },
+                label = { Text("Plant study note") }, supportingText = { Text("Its \"## Session log\" lines and Grove's sessions stay in step both ways.") },
+                modifier = Modifier.fillMaxWidth())
             var booksFolder by remember { mutableStateOf(s.booksFolder) }
             OutlinedTextField(booksFolder, { booksFolder = it; saveSettings { st -> st.copy(booksFolder = it) } },
                 label = { Text("Book notes folder") }, supportingText = { Text("Notes here with subType: Druid book appear on the Books screen and get your progress.") },

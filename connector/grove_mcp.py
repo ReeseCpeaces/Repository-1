@@ -27,7 +27,8 @@ Each book can be linked to its note in the vault's Books folder (notePath); Grov
 lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
 in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off.
 "My Deepest Me" is a weekly prompt goal: one numbered prompt a week (read Monday, finish by Friday;
-a slipped prompt stays open). Never put the book's prompt text anywhere; only the user's own words. Changes made
+a slipped prompt stays open). "Druid exploration" counts plant-study minutes toward 20 hours by the
+deadline (weekly target = minutes left / weeks left); sessions live in the plant-study note's Session log. Never put the book's prompt text anywhere; only the user's own words. Changes made
 here reach the phone through Syncthing and apply when the Grove app next opens, so mention that
 after editing. Times are 24-hour HH:MM. Call grove_overview first to see ids and today's state."""
 
@@ -196,6 +197,20 @@ def grove_prompt_title(title: str) -> str:
 
 
 @mcp.tool()
+def grove_log_exploration(plant: str, minutes: int, note: str | None = None, day: str | None = None) -> str:
+    """Log a Druid exploration (plant study) session: written as a line in the plant-study note's "## Session log"
+    ("- yyyy-MM-dd · Plant · (min:: N) · note"); the app picks it up. plant: a plant name or a unique part of it
+    (a new name adds the plant). day: YYYY-MM-DD, default Grove's today."""
+    return _run(grove.log_exploration, plant, minutes, note, day)
+
+
+@mcp.tool()
+def grove_exploration_log(plant: str | None = None) -> str:
+    """List plant study sessions, newest first, optionally for one plant."""
+    return _run(grove.exploration_log, plant)
+
+
+@mcp.tool()
 def grove_set_holy_day(name: str, date_on: str, detail: str, holy_id: str | None = None) -> str:
     """Add a holy day (or change one when holy_id is given). Grove adds a heads-up task 3 days before it."""
     return _run(grove.set_holy_day, name, date_on, detail, holy_id)
@@ -211,14 +226,14 @@ def grove_remove_holy_day(holy_id: str) -> str:
 def grove_update_settings(cutoff_hour: int | None = None, default_snooze_minutes: int | None = None, daily_note_path: str | None = None,
                           template_path: str | None = None, wolf_name: str | None = None, evening_check_in: bool | None = None,
                           check_in_time: str | None = None, quiet_start: str | None = None, quiet_end: str | None = None,
-                          todo_note_path: str | None = None) -> str:
+                          todo_note_path: str | None = None, plant_study_note_path: str | None = None) -> str:
     """Change settings: cutoff_hour (backup hour a new day starts), default_snooze_minutes, the Obsidian daily note path or template path,
     evening_check_in (one notification at check_in_time listing what's still open), and quiet hours quiet_start-quiet_end
     (HH:MM, by the clock; no reminders, repeats or nudges then; equal times turn quiet hours off), and todo_note_path (the Obsidian
     note, relative to the vault, whose "- [ ]" checklist the app keeps in step with Grove's to-dos; "" unlinks)."""
     return _run(grove.update_settings, cutoff_hour=cutoff_hour, default_snooze_minutes=default_snooze_minutes,
                 daily_note_path=daily_note_path, template_path=template_path, wolf_name=wolf_name, evening_check_in=evening_check_in,
-                check_in_time=check_in_time, quiet_start=quiet_start, quiet_end=quiet_end, todo_note_path=todo_note_path)
+                check_in_time=check_in_time, quiet_start=quiet_start, quiet_end=quiet_end, todo_note_path=todo_note_path, plant_study_note_path=plant_study_note_path)
 
 
 def main() -> None:

@@ -150,6 +150,19 @@ private val BOOK_PIECES = mapOf(
     "snakes" to Piece(R.drawable.piece_snake, 226f, 376f, 22f),
 )
 
+/** The forest piece for a studied plant, by name. */
+private fun plantPiece(name: String): Int = name.lowercase().let { n ->
+    when {
+        "pine" in n || "cedar" in n -> R.drawable.plant_pine
+        "sumac" in n || "maple" in n -> R.drawable.piece_maple_leaf
+        "strawberry" in n -> R.drawable.piece_strawberry
+        "bergamot" in n -> R.drawable.piece_hibiscus
+        "mayapple" in n -> R.drawable.piece_shamrock
+        "yarrow" in n || "milkweed" in n -> R.drawable.piece_leafy_green
+        else -> R.drawable.piece_herb
+    }
+}
+
 /** Something that grows plants: [seed] keeps its placement stable, [total] is how much it has grown. */
 private class Grower(val seed: Int, val type: PlantType, val total: Int, val every: Int, val ageScale: Float, val dormant: Boolean)
 
@@ -201,6 +214,19 @@ private fun placePlants(data: AppData): List<Placed> {
         val total = data.books.sumOf { it.pages }.coerceAtLeast(1)
         val h = 16f + 54f * min(1f, pages.toFloat() / total)
         out += Placed(R.drawable.plant_seedling, 92f - h / 2, 352f - h, h, h, false, 1.3f)
+    }
+    // Druid exploration: a fern that grows with total minutes, and a small piece for each plant with 2+ hours.
+    com.grove.app.data.Explore.goal(data)?.let { g ->
+        val minutes = com.grove.app.data.Explore.totalMinutes(data)
+        val h = 18f + 60f * min(1f, minutes.toFloat() / g.total.coerceAtLeast(1))
+        out += Placed(R.drawable.piece_herb, 196f - h / 2, 364f - h, h, h, false, 2.1f)
+        data.plants.forEachIndexed { i, p ->
+            if (com.grove.app.data.Explore.plantMinutes(data, p.id) < 120 || p.name == "Reflection") return@forEachIndexed
+            val res = plantPiece(p.name)
+            val ph = if (res == R.drawable.plant_pine) 70f else 22f
+            val x = 20f + (i * 37 % 300)
+            out += Placed(res, x, 380f - ph, ph * (if (res == R.drawable.plant_pine) 0.6f else 1f), ph, false, rnd(i * 7 + 5) * 6f)
+        }
     }
     // Each finished field guide adds its piece for good.
     for (b in data.books) {
@@ -271,7 +297,10 @@ fun ForestScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                 Card {
                     Column {
                         data.goals.filter { it.kind != GoalKind.PROMPT }.forEach { g ->
-                            val (name, swatch, detail) = if (g.kind == GoalKind.PAGES) {
+                            val (name, swatch, detail) = if (g.kind == GoalKind.MINUTES) {
+                                val m = com.grove.app.data.Explore.totalMinutes(data)
+                                Triple("Fern", Color(0xFF00D26A), "${g.name} · ${com.grove.app.data.Explore.hours(m)} of ${g.total / 60} h; each plant with 2 h adds its piece")
+                            } else if (g.kind == GoalKind.PAGES) {
                                 val finished = data.books.count { Logic.bookFinished(data, it) }
                                 Triple("Reading seedling", Color(0xFF86D72F), "${g.name} · $finished of ${data.books.size} books finished, each adds its own piece")
                             } else Triple(PLANTS[3].name, PLANTS[3].swatch, "${g.name} · ${Logic.totalSessions(data, g)} sessions")
@@ -356,7 +385,7 @@ private fun Scene(data: AppData): Mood {
     val land = matrix(mood.brightness, mood.saturation)
     val landFilter = if (mood == Mood.DAY) null else ColorFilter.colorMatrix(land)
     val dormantFilter = ColorFilter.colorMatrix(matrix(mood.brightness * 0.95f, mood.saturation * 0.15f))
-    val plants = remember(data.habits, data.days, data.goals, data.books) { placePlants(data) }
+    val plants = remember(data.habits, data.days, data.goals, data.books, data.explore, data.plants) { placePlants(data) }
     val aria = "Forest with ${plants.size} plants. Your wolf is ${if (pose == Pose.SLEEP) "asleep" else "awake"}."
 
     BoxWithConstraints(

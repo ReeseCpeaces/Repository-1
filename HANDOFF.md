@@ -80,6 +80,22 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
     hours apply. No streak, no Forest piece.
   - Connector: `grove_prompt_thought`, `grove_prompt_done`, `grove_prompt_title` write the note and
     tracker directly and update grove.json; the app adds the daily-note line when it imports a done.
+- **Druid exploration / Plant Study** (`GoalKind.MINUTES`; rules in `data/Explore.kt`, UI in `ui/ExploreScreens.kt`,
+  note sync in `obsidian/ExploreNote.kt`): 1,200 min (20 h) by 2027-06-21. Weekly target = minutes left at the
+  start of the week ÷ weeks left, rounded up (like pages). Today card + "+ Session" (plant, minutes, note, day);
+  the title opens the Plant Study screen (totals, plant list with in-season months outlined, editable order
+  and names; Session log tab; plant pages). Saturday 15:00 nudge if under target. Forest: a fern grows with
+  total minutes; each plant with 2+ hours adds a small piece.
+  - Plants (`AppData.plants`, in grove.json, ids "p") are seeded from Reese's table; sessions (`AppData.explore`,
+    ids "e") are also exported in history.json for the connector.
+  - The note (`Settings.plantStudyNotePath`, default `Druidry/Druid Exploration - Plant Study.md`) is kept in
+    step both ways through its `## Session log` lines, exactly `- yyyy-MM-dd · Plant · (min:: N) · note`
+    (Reese's Dataview sums `min`). Each session remembers its line as of the last sync (`synced`): unchanged
+    line = Grove wins; changed line with the same day and plant = the note wins; missing line = deleted;
+    new lines join Grove (unknown plant names are added); deleted in Grove = line removed (`exploreDeleted`).
+    Nothing else in the note is touched; it's never created; unreadable = never written.
+  - Connector: `grove_log_exploration` writes the note line itself; `grove_exploration_log` lists sessions
+    (from the note, else history.json); `grove_overview` shows the goal and minutes per plant.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a

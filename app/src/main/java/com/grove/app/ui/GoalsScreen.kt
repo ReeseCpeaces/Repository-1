@@ -59,7 +59,7 @@ fun shortTitle(b: Book) = b.title.substringBefore(" (").substringBefore(":")
 @Composable
 fun GoalCards(data: AppData, go: (Screen) -> Unit) {
     var logging by remember { mutableStateOf<Goal?>(null) }
-    for (g in data.goals.filter { it.kind != GoalKind.PROMPT }) {
+    for (g in data.goals.filter { it.kind != GoalKind.PROMPT && it.kind != GoalKind.MINUTES }) {
         val done = Logic.progress(data, g)
         val target = Logic.target(data, g)
         Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
@@ -100,6 +100,7 @@ fun GoalCards(data: AppData, go: (Screen) -> Unit) {
             }
         }
     }
+    for (g in data.goals.filter { it.kind == GoalKind.MINUTES }) ExploreCard(data, g, go)
     for (g in data.goals.filter { it.kind == GoalKind.PROMPT }) PromptCard(data, g)
     logging?.let { LogPagesDialog(data) { logging = null } }
 }

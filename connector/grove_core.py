@@ -673,6 +673,95 @@ class Grove:
         self.save_setup(setup)
         return f"Prompt {g['current']} title set to \"{g['title']}\"."
 
+    # ----- Druid exploration: plant study (same as Explore.kt) -----
+
+    EXPLORE_LINE = re.compile(r"^\s*[-*] (\d{4}-\d{2}-\d{2})\s*·\s*(.+?)\s*·\s*\(min::\s*(\d+)\)(?:\s*·\s*(.*?))?\s*$")
+    DEFAULT_PLANT_NOTE = "Druidry/Druid Exploration - Plant Study.md"
+
+    @staticmethod
+    def explore_line(day: str, plant: str, minutes: int, note: str = "") -> str:
+        return f"- {day} · {plant} · (min:: {minutes})" + (f" · {note.strip()}" if note and note.strip() else "")
+
+    def plant_note_path(self, setup: dict) -> Path:
+        p = (setup.get("settings", {}).get("plantStudyNotePath") or self.DEFAULT_PLANT_NOTE).strip().strip("/")
+        return self.vault / (p if p.endswith(".md") else p + ".md")
+
+    def explore_sessions(self, setup: dict, history: dict) -> list[dict]:
+        """Sessions from the note's "## Session log" (the main copy), else from history.json."""
+        path = self.plant_note_path(setup)
+        if path.is_file():
+            lines = path.read_text(encoding="utf-8").replace("\r\n", "\n").split("\n")
+            head = next((i for i, l in enumerate(lines) if re.fullmatch(r"##\s+Session log\s*", l, re.I)), -1)
+            if head >= 0:
+                end = next((j for j in range(head + 1, len(lines)) if re.match(r"#{1,2}\s", lines[j])), len(lines))
+                out = []
+                for line in lines[head + 1:end]:
+                    m = self.EXPLORE_LINE.match(line)
+                    if m:
+                        out.append({"day": m.group(1), "plant": m.group(2), "minutes": int(m.group(3)), "note": m.group(4) or ""})
+                return out
+        names = {p["id"]: p["name"] for p in setup.get("plants", [])}
+        return [{"day": s["day"], "plant": names.get(s["plant"], s["plant"]), "minutes": s["minutes"], "note": s.get("note", "")}
+                for s in history.get("explore", [])]
+
+    def explore_progress(self, setup: dict, history: dict, g: dict, ref: date) -> tuple[int, int, int]:
+        """(minutes this week, this week's target, total minutes). Target: minutes left at the week's start / weeks left, rounded up."""
+        sessions = self.explore_sessions(setup, history)
+        ws = self.week_start(ref)
+        week = sum(s["minutes"] for s in sessions if ws <= date.fromisoformat(s["day"]) <= ref)
+        before = sum(s["minutes"] for s in sessions if date.fromisoformat(s["day"]) < ws)
+        left = max(0, g.get("total", 0) - before)
+        weeks = max(1, -(-(date.fromisoformat(g["deadline"]) - ws).days // 7)) if g.get("deadline") else 1
+        return week, -(-left // weeks), sum(s["minutes"] for s in sessions)
+
+    @staticmethod
+    def hours(minutes: int) -> str:
+        h = minutes / 60
+        return str(int(h)) if h == int(h) else f"{h:.1f}"
+
+    def match_plant(self, setup: dict, plant: str) -> str:
+        plants = setup.get("plants", [])
+        k = plant.strip().lower()
+        exact = [p for p in plants if p["name"].lower() == k]
+        if exact:
+            return exact[0]["name"]
+        part = [p for p in plants if k in p["name"].lower() or k in p.get("latin", "").lower()]
+        if len(part) == 1:
+            return part[0]["name"]
+        if len(part) > 1:
+            raise GroveError(f"{plant!r} could mean {', '.join(p['name'] for p in part)}.")
+        return plant.strip()  # a new plant: the app adds it to the list
+
+    def log_exploration(self, plant: str, minutes: int, note: str | None = None, day: str | None = None) -> str:
+        if minutes <= 0:
+            raise GroveError("minutes must be more than 0.")
+        setup, history = self.load_setup(), self.load_history()
+        name = self.match_plant(setup, plant)
+        day = self.check_date(day) or history["currentDay"]
+        path = self.plant_note_path(setup)
+        if not path.is_file():
+            raise GroveError(f"{path.relative_to(self.vault)} doesn't exist, so the session can't be written.")
+        text = path.read_text(encoding="utf-8")
+        line = self.explore_line(day, name, minutes, " ".join((note or "").split()))
+        self._write_text(path, self.append_to_section(text, "Session log", [line]))
+        g = next((x for x in setup.get("goals", []) if x["kind"] == "minutes"), None)
+        msg = f"Logged: {line[2:]}"
+        if g:
+            week, target, total = self.explore_progress(setup, history, g, date.fromisoformat(history["currentDay"]))
+            msg += f". This week {week} / {target} min, {self.hours(total)} of {g['total'] // 60} h in all."
+        return msg
+
+    def exploration_log(self, plant: str | None = None) -> str:
+        setup, history = self.load_setup(), self.load_history()
+        sessions = self.explore_sessions(setup, history)
+        if plant:
+            name = self.match_plant(setup, plant).lower()
+            sessions = [s for s in sessions if s["plant"].lower() == name]
+        if not sessions:
+            return "No plant study sessions yet."
+        sessions.sort(key=lambda s: s["day"], reverse=True)
+        return "\n".join(f"- {s['day']} · {s['plant']} · {s['minutes']} min" + (f" · {s['note']}" if s["note"] else "") for s in sessions)
+
     # ----- evening check-in and quiet hours (same as Logic.kt) -----
 
     DEFAULT_NOTIFY = {"eveningCheckIn": True, "checkInTime": "21:00", "quietStart": "21:00", "quietEnd": "08:00"}
@@ -721,7 +810,16 @@ class Grove:
             lines += ["", "Weekly goals (weeks start Monday, no streaks):"]
             for g in goals:
                 done, target = self.progress(setup, history, g, d)
-                if g["kind"] == "prompt":
+                if g["kind"] == "minutes":
+                    week, target, total = self.explore_progress(setup, history, g, d)
+                    sessions = self.explore_sessions(setup, history)
+                    per = {}
+                    for s in sessions:
+                        per[s["plant"]] = per.get(s["plant"], 0) + s["minutes"]
+                    order = [p["name"] for p in setup.get("plants", [])] + [n for n in per if n not in {p["name"] for p in setup.get("plants", [])}]
+                    lines.append(f"- {g['name']} (id {g['id']}): {week} / {target} min this week, {self.hours(total)} of {g['total'] // 60} h, "
+                                 f"deadline {g.get('deadline')}. Per plant: " + ", ".join(f"{n} {per.get(n, 0)} min" for n in order))
+                elif g["kind"] == "prompt":
                     g = self.prompt_effective(g, d)
                     title = f', your title: "{g["title"]}"' if g.get("title") else ", no title yet"
                     lines.append(f"- {g['name']} (id {g['id']}): {self.prompt_status(g, d)}{title}, "
@@ -828,7 +926,7 @@ class Grove:
     MIN_NEXT_ID = 27  # t15-t26 were handed out and removed before the counter existed
 
     def highest_id_number(self, setup: dict, history: dict) -> int:
-        ids = [x["id"] for key in ("habits", "tasks", "goals", "books", "todos") for x in setup.get(key, [])]
+        ids = [x["id"] for key in ("habits", "tasks", "goals", "books", "todos", "plants") for x in setup.get(key, [])]
         for rec in history.get("days", {}).values():
             ids += list(rec.get("steps", {})) + list(rec.get("tasks", {})) + rec.get("sessions", []) + list(rec.get("pages", {}))
         nums = [int(m.group(1)) for i in ids if (m := re.fullmatch(r"[a-z](\d{1,7})", i))]
@@ -969,7 +1067,8 @@ class Grove:
         setup = self.load_setup()
         mapping = {"cutoff_hour": "cutoffHour", "default_snooze_minutes": "defaultSnoozeMinutes", "daily_note_path": "dailyNotePath",
                    "template_path": "templatePath", "wolf_name": "wolfName", "evening_check_in": "eveningCheckIn",
-                   "check_in_time": "checkInTime", "quiet_start": "quietStart", "quiet_end": "quietEnd", "todo_note_path": "todoNotePath"}
+                   "check_in_time": "checkInTime", "quiet_start": "quietStart", "quiet_end": "quietEnd", "todo_note_path": "todoNotePath",
+                   "plant_study_note_path": "plantStudyNotePath"}
         for k in ("check_in_time", "quiet_start", "quiet_end"):
             if changes.get(k) is not None:
                 self.check_times([changes[k]])

@@ -32,6 +32,7 @@ data class SharedSetup(
     val books: List<Book>? = null,
     val nextId: Int? = null,
     val todos: List<Todo>? = null,
+    val plants: List<com.grove.app.data.Plant>? = null,
 )
 
 /** A log written by the connector into Grove/inbox/, applied by the app and then deleted. */
@@ -55,6 +56,8 @@ data class SharedHistory(
     val currentDay: String,
     val days: Map<String, DayRecord>,
     val appliedInbox: List<String> = emptyList(),
+    /** Plant-study sessions (the note's Session log is the main copy; this is for the connector). */
+    val explore: List<com.grove.app.data.ExploreSession> = emptyList(),
 )
 
 /**
@@ -78,7 +81,7 @@ object VaultSync {
         habits = data.habits, tasks = data.tasks, holyDays = data.holyDays,
         // The vault location is specific to this phone, so it's never shared.
         settings = data.settings.copy(vaultUri = ""),
-        goals = data.goals, books = data.books, nextId = data.nextId, todos = data.todos,
+        goals = data.goals, books = data.books, nextId = data.nextId, todos = data.todos, plants = data.plants,
     )
 
     private fun folder(context: Context, data: AppData): DocumentFile? {
@@ -109,7 +112,7 @@ object VaultSync {
         if (setupOf(old) != setupOf(new)) {
             worker.execute { runCatching { export(context, new) }.onFailure { Log.w(TAG, "Export failed", it) } }
         }
-        if (old.days != new.days || old.currentDay != new.currentDay || old.appliedInbox != new.appliedInbox) {
+        if (old.days != new.days || old.currentDay != new.currentDay || old.appliedInbox != new.appliedInbox || old.explore != new.explore) {
             worker.execute { runCatching { exportHistory(context, new) }.onFailure { Log.w(TAG, "History export failed", it) } }
         }
     }
@@ -141,7 +144,7 @@ object VaultSync {
 
     private fun exportHistory(context: Context, data: AppData) {
         val dir = folder(context, data) ?: return
-        write(context, dir, HISTORY, json.encodeToString(SharedHistory.serializer(), SharedHistory(currentDay = data.currentDay, days = data.days, appliedInbox = data.appliedInbox)) + "\n")
+        write(context, dir, HISTORY, json.encodeToString(SharedHistory.serializer(), SharedHistory(currentDay = data.currentDay, days = data.days, appliedInbox = data.appliedInbox, explore = data.explore)) + "\n")
     }
 
     private fun export(context: Context, data: AppData) {
@@ -172,10 +175,11 @@ object VaultSync {
                 habits = setup.habits, tasks = setup.tasks, holyDays = setup.holyDays,
                 settings = setup.settings.copy(vaultUri = d.settings.vaultUri),
                 // A grove.json written before the prompt goal existed doesn't remove it.
-                goals = setup.goals?.let { g -> g + d.goals.filter { it.kind == com.grove.app.data.GoalKind.PROMPT && g.none { x -> x.id == it.id } } } ?: d.goals,
+                goals = setup.goals?.let { g -> g + d.goals.filter { (it.kind == com.grove.app.data.GoalKind.PROMPT || it.kind == com.grove.app.data.GoalKind.MINUTES) && g.none { x -> x.id == it.id } } } ?: d.goals,
                 books = setup.books ?: d.books,
                 nextId = maxOf(d.nextId, setup.nextId ?: 0),
                 todos = setup.todos ?: d.todos,
+                plants = setup.plants ?: d.plants,
                 // Linked to-dos deleted in grove.json (say, by Claude) also leave the to-do note.
                 todoDeleted = d.todoDeleted + if (setup.todos == null) emptyList()
                     else d.todos.filter { t -> t.inNote && setup.todos.none { it.id == t.id } }.map { it.noteName },
@@ -259,6 +263,9 @@ object VaultSync {
         To-do fields (floating to-dos, no date): `id` ("d" + number from nextId), `name`, `list`, `high`, `due` (optional
         "do by" date), `remind` (optional daily "HH:mm" until done), `done` (day it was checked off, "" = open),
         `created`. Leave `inNote`, `noteName` and `noteDone` alone: they track the to-do note set in `todoNotePath`.
+
+        Plant fields (plant study, in order): `id` ("p" + number), `name`, `latin`, `backup`, `season`, `months` (best months 1-12).
+        Plant-study sessions live in the plant-study note's "## Session log" (`- yyyy-MM-dd · Plant · (min:: N) · note`).
 
         `nextId`: the next number for new ids. Take ids from it (e.g. "t31", then set nextId to 32); never reuse an id.
 

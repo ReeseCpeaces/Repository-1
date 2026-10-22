@@ -130,7 +130,7 @@ class LogicTest {
     @Test fun writingAndReadingBecomeWeeklyGoals() {
         val d = migrated()
         assertEquals(listOf("h1", "h2", "h3"), d.habits.map { it.id })
-        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES, GoalKind.PROMPT), d.goals.map { it.kind })
+        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES, GoalKind.PROMPT, GoalKind.MINUTES), d.goals.map { it.kind })
         assertEquals(9, d.books.size)
         assertEquals(2587, d.books.sumOf { it.pages })
         assertTrue(d.goals.none { it.id == "h4" || it.id == "h5" })
@@ -426,5 +426,43 @@ class LogicTest {
         val other = Logic.startNewDay(Logic.toggleHabit(Seed.data(LocalDate.parse("2026-10-19")), "h1", LocalDateTime.parse("2026-10-19T07:00")), early)
         assertEquals("2026-10-20", other.currentDay)
         assertTrue(!Logic.isDone(other, "2026-10-20", other.habits.first { it.id == "h1" }))
+    }
+
+    // ----- Druid exploration: plant study -----
+
+    @Test fun plantStudyTargetAndNoteStayInStep() {
+        val E = com.grove.app.data.Explore
+        var d = migrated()
+        assertEquals(10, d.plants.size)
+        val g = E.goal(d)!!
+        assertEquals(35, E.weeklyTarget(d, g, LocalDate.parse("2026-10-19"))) // 1,200 min over 35 weeks, rounded up
+        assertTrue(E.inSeason(d.plants[1], 10)) // sumac in October
+        assertTrue(!E.inSeason(d.plants[0], 10)) // "any time" isn't singled out
+        val pine = d.plants.first().id
+        d = E.add(d, pine, 30, "sat by\n the big one", "2026-10-19")
+        val note = "# Plant Study\n\n## Session log\n- 2026-10-18 · Yarrow · (min:: 20)\n- 2026-10-17 · Paw paw · (min:: 10) · new one\n\n## Season plan\nkeep\n"
+        val (d1, t1) = E.syncNote(d, note)
+        assertEquals("# Plant Study\n\n## Session log\n- 2026-10-18 · Yarrow · (min:: 20)\n- 2026-10-17 · Paw paw · (min:: 10) · new one\n" +
+            "- 2026-10-19 · White pine · (min:: 30) · sat by the big one\n\n## Season plan\nkeep\n", t1)
+        assertEquals(60, E.totalMinutes(d1))
+        assertEquals("Paw paw", d1.plants.last().name) // unknown plant joins the list
+        assertEquals(d1 to t1, E.syncNote(d1, t1)) // stable
+        // Edited in Grove -> the line follows.
+        val s = d1.explore.first { it.plant == pine }
+        val (d3, t3) = E.syncNote(E.edit(d1, s.id, pine, 45, "longer", s.day), t1)
+        assertTrue(t3, t3.contains("- 2026-10-19 · White pine · (min:: 45) · longer\n") && !t3.contains("(min:: 30)"))
+        // Edited in Obsidian (same day and plant) -> the note wins.
+        val t4 = t3.replace("(min:: 45) · longer", "(min:: 50) · longer still")
+        val (d5, _) = E.syncNote(d3, t4)
+        assertEquals(50, d5.explore.first { it.plant == pine }.minutes)
+        // Deleted in Obsidian -> gone from Grove.
+        val t6 = t4.replace("- 2026-10-18 · Yarrow · (min:: 20)\n", "")
+        val (d7, t7) = E.syncNote(d5, t6)
+        assertTrue(d7.explore.none { it.minutes == 20 })
+        // Deleted in Grove -> the line leaves the note; nothing else in the note changes.
+        val paw = d7.explore.first { it.note == "new one" }
+        val (d8, t8) = E.syncNote(E.delete(d7, paw.id), t7)
+        assertTrue(t8, !t8.contains("Paw paw · (min") && t8.endsWith("## Season plan\nkeep\n"))
+        assertEquals(1, d8.explore.size)
     }
 }

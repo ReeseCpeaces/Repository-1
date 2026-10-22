@@ -100,7 +100,10 @@ class ReminderReceiver : BroadcastReceiver() {
                 Notifier.showNudge(context, id, g.name, text, snooze)
                 return
             }
-            val text = if (g.kind == com.grove.app.data.GoalKind.PAGES) {
+            val text = if (g.kind == com.grove.app.data.GoalKind.MINUTES) {
+                "$done / $target min this week · ${com.grove.app.data.Explore.hours(com.grove.app.data.Explore.totalMinutes(data))} of ${g.total / 60} h. " +
+                    "Even a short sit with a plant counts."
+            } else if (g.kind == com.grove.app.data.GoalKind.PAGES) {
                 val book = Logic.currentBook(data)
                 "$done / $target pages this week" + (book?.let { " · ${it.title.substringBefore(" (")} p. ${Logic.bookPage(data, it)}" } ?: "") +
                     ". Even a couple of pages counts."

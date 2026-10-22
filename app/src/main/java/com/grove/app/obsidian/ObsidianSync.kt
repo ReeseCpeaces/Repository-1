@@ -27,7 +27,7 @@ object ObsidianSync {
         val earlier = if (old == null) emptySet() else (old.days.keys + new.days.keys)
             .filter { it != new.currentDay && old.days[it] != new.days[it] }.toSet()
         if (old != null && earlier.isEmpty() && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits &&
-            old.tasks == new.tasks && old.goals == new.goals && old.books == new.books &&
+            old.tasks == new.tasks && old.goals == new.goals && old.books == new.books && old.explore == new.explore &&
             com.grove.app.data.Todos.doneOn(old, new.currentDay) == com.grove.app.data.Todos.doneOn(new, new.currentDay)) return
         // Read the latest data when the job runs, so queued jobs never write the same lines twice.
         worker.execute { runCatching { sync(context, Store.get(context), earlier) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
@@ -77,9 +77,10 @@ object ObsidianSync {
                 lines += "${g.name}: " + com.grove.app.data.Prompts.status(g.copy(title = ""), d).substringBefore(" · aim")
                 continue
             }
-            val today = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day).let { if (it > 0) " (+$it pages today)" else "" }
+            val today = if (g.kind == com.grove.app.data.GoalKind.MINUTES) data.explore.filter { it.day == day }.sumOf { it.minutes }.let { if (it > 0) " (+$it min today)" else "" }
+            else if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day).let { if (it > 0) " (+$it pages today)" else "" }
             else if (Logic.sessionLogged(data, day, g)) " (session today)" else ""
-            val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else ""
+            val unit = if (g.kind == com.grove.app.data.GoalKind.PAGES) " pages" else if (g.kind == com.grove.app.data.GoalKind.MINUTES) " min" else ""
             lines += "${g.name}: ${Logic.progress(data, g, d)} / ${Logic.target(data, g, d)}$unit this week$today"
         }
         if (day == data.currentDay) lines += "Streaks: " + data.habits.joinToString(" · ") { "${it.name} ${Logic.streak(data, it)}" }

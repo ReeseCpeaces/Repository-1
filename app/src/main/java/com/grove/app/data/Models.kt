@@ -74,6 +74,9 @@ object GoalKind {
      * Friday. A prompt not done by Sunday stays open the next week. Only Reese's own words go in Grove.
      */
     const val PROMPT = "prompt"
+
+    /** Minutes toward [Goal.total] by [Goal.deadline] (Druid exploration: plant study sessions in [AppData.explore]). */
+    const val MINUTES = "minutes"
 }
 
 /** A weekly goal: any day counts, no streak, a fresh count every Monday. */
@@ -105,6 +108,31 @@ data class Goal(
     val tracker: String = "",
     /** Prompts whose note exists or existed; a deleted one is never recreated. */
     val notesMade: List<Int> = emptyList(),
+)
+
+/** A plant in the plant study. [months] (1–12) are its best months; all 12 = any time. */
+@Serializable
+data class Plant(
+    val id: String,
+    val name: String,
+    val latin: String = "",
+    val backup: String = "",
+    val season: String = "",
+    val months: List<Int> = (1..12).toList(),
+)
+
+/**
+ * One plant-study session. [synced] is its line in the plant-study note as of the last sync
+ * ("" = not in the note yet), so changes on either side can be told apart.
+ */
+@Serializable
+data class ExploreSession(
+    val id: String,
+    val day: String,
+    val plant: String,
+    val minutes: Int,
+    val note: String = "",
+    val synced: String = "",
 )
 
 /** A thought or final answer waiting to be written into a prompt's note. Removed once it's written. */
@@ -167,6 +195,8 @@ data class Settings(
     val quietEnd: String = "08:00",
     /** Obsidian note whose checklist (- [ ] item) is kept in step with Grove's to-dos. "" = not linked. */
     val todoNotePath: String = "",
+    /** The plant-study note whose "## Session log" lines are kept in step with Grove's sessions. */
+    val plantStudyNotePath: String = "Druidry/Druid Exploration - Plant Study.md",
 )
 
 /** What got done on one logical day. */
@@ -216,6 +246,11 @@ data class AppData(
     val promptQueue: List<PromptEntry> = emptyList(),
     /** The My Deepest Me prompt goal has been set up (so removing it later doesn't bring it back). */
     val migratedPrompt: Boolean = false,
+    /** Plant study: the plants (in order), the sessions, and note lines to remove (sessions deleted in Grove). */
+    val plants: List<Plant> = emptyList(),
+    val explore: List<ExploreSession> = emptyList(),
+    val exploreDeleted: List<String> = emptyList(),
+    val migratedExplore: Boolean = false,
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

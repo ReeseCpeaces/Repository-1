@@ -249,7 +249,7 @@ object Logic {
 
     /** Highest number used in any id so far, in the setup or in history. */
     fun highestIdNumber(data: AppData): Int {
-        val ids = data.habits.map { it.id } + data.tasks.map { it.id } + data.goals.map { it.id } + data.books.map { it.id } + data.todos.map { it.id } +
+        val ids = data.habits.map { it.id } + data.tasks.map { it.id } + data.goals.map { it.id } + data.books.map { it.id } + data.todos.map { it.id } + data.plants.map { it.id } + data.explore.map { it.id } +
             data.days.values.flatMap { it.steps.keys + it.tasks.keys + it.sessions + it.pages.keys }
         return ids.mapNotNull { NUM.find(it)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0
     }
@@ -311,12 +311,14 @@ object Logic {
     fun progress(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int = when (g.kind) {
         GoalKind.PAGES -> pagesThisWeek(data, ref)
         GoalKind.PROMPT -> if (Prompts.doneThisWeek(g, ref) || Prompts.finishedAll(g)) 1 else 0
+        GoalKind.MINUTES -> Explore.minutesThisWeek(data, ref)
         else -> sessionsThisWeek(data, g, ref)
     }
 
     fun target(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int = when (g.kind) {
         GoalKind.PAGES -> weeklyPageTarget(data, g, ref)
         GoalKind.PROMPT -> 1
+        GoalKind.MINUTES -> Explore.weeklyTarget(data, g, ref)
         else -> g.perWeek
     }
 
@@ -324,6 +326,7 @@ object Logic {
     fun goalStatus(data: AppData, g: Goal): String = when (g.kind) {
         GoalKind.PROMPT -> if (Prompts.finishedAll(g)) "all done ✓" else "Prompt ${g.current}" + if (progress(data, g) > 0) " ✓" else ""
         GoalKind.PAGES -> "${progress(data, g)}/${target(data, g)} pages this week"
+        GoalKind.MINUTES -> "${progress(data, g)}/${target(data, g)} min this week"
         else -> "${progress(data, g)}/${target(data, g)} this week"
     }
 
