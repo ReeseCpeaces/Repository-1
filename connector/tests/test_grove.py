@@ -355,6 +355,21 @@ def test_plant_study_sessions():
     assert "75 / 35" in g.overview()
 
 
+def test_once_a_week_any_day_task():
+    g = Grove(make_vault())  # today Thursday 2026-10-15; week started Monday the 12th
+    t = g.add_task("Nature time (15+ min)", any_day=True, days=["Wed", "Sat"], prop="fifteen in nature")
+    assert t["anyDay"] and not t["date"]
+    over = g.overview()
+    assert "any day this week Nature time (15+ min)" in over
+    assert "Nature time (15+ min)" not in g.check_in_items(g.load_setup(), g.load_history())  # Thursday isn't a reminder day
+    history = json.loads(g.history_path.read_text())
+    history["days"]["2026-10-13"]["tasks"] = {t["id"]: ""}  # done Tuesday
+    g.history_path.write_text(json.dumps(history))
+    assert "Nature time" not in g.overview()  # waits for next week
+    from datetime import date
+    assert [x["name"] for x in g.tasks_on(g.load_setup(), date(2026, 10, 19), g.load_history())] == ["Nature time (15+ min)"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

@@ -93,26 +93,27 @@ def grove_remove_habit(habit_id: str) -> str:
 @mcp.tool()
 def grove_add_task(name: str, time_due: str = "16:30", days: list[str] | None = None, date_due: str | None = None,
                    list_name: str = "Inbox", reminders: list[str] | None = None, nag: bool = True, nag_minutes: int = 30,
-                   first_of_month: bool = False, prop: str = "", high: bool = False, month_day: int | None = None) -> str:
-    """Add a task. Weekly: give `days` (e.g. ["Thu"]). Monthly: give `month_day` (1-31, e.g. 13 for the 13th of every
+                   first_of_month: bool = False, prop: str = "", high: bool = False, month_day: int | None = None, any_day: bool = False) -> str:
+    """Add a task. Weekly: give `days` (e.g. ["Thu"]). Once a week on any day: any_day=true (it shows every day from Monday
+    until checked off; `days` are then only the days its reminders fire, e.g. ["Wed", "Sat"]). Monthly: give `month_day` (1-31, e.g. 13 for the 13th of every
     month; 29-31 fall on the last day of shorter months). One-time: give `date_due` (YYYY-MM-DD).
 
     time_due is the 24-hour due time. reminders default to the due time. first_of_month: only the first matching
     weekday of each month. prop: Obsidian daily-note property to tick when done. high: high priority.
     """
-    return _run(grove.add_task, name, time_due, days, date_due, list_name, reminders, nag, nag_minutes, first_of_month, prop, high, month_day)
+    return _run(grove.add_task, name, time_due, days, date_due, list_name, reminders, nag, nag_minutes, first_of_month, prop, high, month_day, any_day)
 
 
 @mcp.tool()
 def grove_update_task(task_id: str, name: str | None = None, time_due: str | None = None, days: list[str] | None = None,
                       date_due: str | None = None, list_name: str | None = None, reminders: list[str] | None = None,
                       nag: bool | None = None, nag_minutes: int | None = None, first_of_month: bool | None = None,
-                      prop: str | None = None, high: bool | None = None, month_day: int | None = None) -> str:
+                      prop: str | None = None, high: bool | None = None, month_day: int | None = None, any_day: bool | None = None) -> str:
     """Change a task. Only the fields given are changed. date_due makes it one-time, days makes it weekly,
-    month_day (1-31) makes it monthly."""
+    month_day (1-31) makes it monthly, any_day=true makes it once a week on any day (days = reminder days)."""
     return _run(grove.update_task, task_id, name=name, time_due=time_due, days=days, date_due=date_due, list_name=list_name,
                 reminders=reminders, nag=nag, nag_minutes=nag_minutes, first_of_month=first_of_month, prop=prop, high=high,
-                month_day=month_day)
+                month_day=month_day, any_day=any_day)
 
 
 @mcp.tool()

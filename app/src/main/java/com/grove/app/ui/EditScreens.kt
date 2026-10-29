@@ -130,17 +130,18 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
     val reminders = remember { mutableStateListOf<String>().apply { addAll(old?.reminders ?: listOf(time0 ?: "16:30")) } }
     var nag by remember { mutableStateOf(old?.nag ?: true) }
     var nagMinutes by remember { mutableStateOf(old?.nagMinutes ?: 30) }
-    var repeat by remember { mutableStateOf(when { (old?.monthDay ?: 0) > 0 -> "monthly"; old?.days?.any { it } == true -> "weekly"; else -> "once" }) }
+    var repeat by remember { mutableStateOf(when { old?.anyDay == true -> "anyday"; (old?.monthDay ?: 0) > 0 -> "monthly"; old?.days?.any { it } == true -> "weekly"; else -> "once" }) }
     var monthDay by remember { mutableStateOf((old?.monthDay?.takeIf { it > 0 } ?: LocalDate.parse(date).dayOfMonth).toString()) }
 
     fun save() {
         if (name.isBlank()) return
-        val weekly = repeat == "weekly" && days.any { it }
+        val anyDay = repeat == "anyday"
+        val weekly = (repeat == "weekly" && days.any { it }) || anyDay
         val md = if (repeat == "monthly") monthDay.toIntOrNull()?.coerceIn(1, 31) ?: return else 0
         val t = (old ?: Task("", name)).copy(
             name = name.trim(), list = list.trim().ifEmpty { "Inbox" },
             days = if (weekly) days.toList() else List(7) { false }, date = if (repeat == "once" || (repeat == "weekly" && !weekly)) date else "",
-            monthDay = md, time = time, firstOfMonth = firstOfMonth && weekly, prop = prop.trim(), high = high,
+            monthDay = md, time = time, firstOfMonth = firstOfMonth && weekly && !anyDay, prop = prop.trim(), high = high, anyDay = anyDay,
             reminders = reminders.sorted(), nag = nag, nagMinutes = nagMinutes,
         )
         Store.update(context) { d ->
@@ -160,6 +161,10 @@ fun EditTaskScreen(data: AppData, id: String?, date0: String?, time0: String?, b
             "weekly" -> {
                 DayPicker("Repeats on", days)
                 SwitchRow("Only the first one of the month", "e.g. first Sunday", firstOfMonth) { firstOfMonth = it }
+            }
+            "anyday" -> {
+                Text("Shows every day from Monday until you check it off, then waits for next week.", fontSize = 12.sp, color = GroveColors.Muted)
+                DayPicker("Remind me on (while it's still open)", days)
             }
             "monthly" -> OutlinedTextField(
                 monthDay, { v -> monthDay = v.filter { it.isDigit() }.take(2) },
@@ -204,7 +209,7 @@ private fun Form(title: String, back: () -> Unit, save: () -> Unit, onDelete: ((
 private fun RepeatPicker(repeat: String, todoOption: Boolean, onPick: (String) -> Unit) {
     Text("Repeat", fontWeight = FontWeight.SemiBold)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        val options = listOf("once" to "One time", "weekly" to "Weekly", "monthly" to "Monthly") + if (todoOption) listOf("todo" to "To-do (no date)") else emptyList()
+        val options = listOf("once" to "One time", "weekly" to "Weekly", "anyday" to "Once a week, any day", "monthly" to "Monthly") + if (todoOption) listOf("todo" to "To-do (no date)") else emptyList()
         options.forEach { (key, label) ->
             FilterChip(selected = repeat == key, onClick = { onPick(key) }, label = { Text(label) })
         }

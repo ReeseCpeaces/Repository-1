@@ -127,6 +127,8 @@ object Logic {
         val wd = weekdayIndex(d)
         for (t in data.tasks) {
             val on = when {
+                // Once a week, any day: every day until it's done; the day it's done it stays (crossed out).
+                t.anyDay -> !doneEarlierInWeek(data, t.id, d)
                 // Monthly on a day of the month; in shorter months a 29th–31st falls on the last day.
                 t.monthDay > 0 -> d.dayOfMonth == minOf(t.monthDay, d.lengthOfMonth())
                 t.days.any { it } -> t.days[wd] && (!t.firstOfMonth || d.dayOfMonth <= 7)
@@ -143,6 +145,16 @@ object Logic {
     }
 
     fun isTaskDone(data: AppData, day: String, taskId: String): Boolean = data.days[day]?.tasks?.containsKey(taskId) == true
+
+    /** Checked off on a day before [d] in the same Monday-start week. */
+    fun doneEarlierInWeek(data: AppData, taskId: String, d: LocalDate): Boolean {
+        var x = weekStart(d)
+        while (x.isBefore(d)) { if (isTaskDone(data, key(x), taskId)) return true; x = x.plusDays(1) }
+        return false
+    }
+
+    /** Whether a due task's reminders (and the evening check-in) apply on [d]: an any-day task only on its reminder days. */
+    fun remindsOn(t: Task, d: LocalDate): Boolean = !t.anyDay || t.days[weekdayIndex(d)]
 
     fun upcomingHolyDays(data: AppData, from: LocalDate): List<Pair<HolyDay, Long>> =
         data.holyDays.map { it to ChronoUnit.DAYS.between(from, date(it.date)) }.filter { it.second >= 0 }.sortedBy { it.second }
@@ -522,7 +534,7 @@ object Logic {
         val day = groveToday(data)
         val open = data.habits.filter { it.role != Role.MORNING && scheduledOn(it, day) && !isDone(data, data.currentDay, it) }
         val (bedtime, habits) = open.partition { it.role == Role.BEDTIME }
-        val tasks = tasksOn(data, day).filter { !isTaskDone(data, data.currentDay, it.id) }
+        val tasks = tasksOn(data, day).filter { !isTaskDone(data, data.currentDay, it.id) && (it.task == null || remindsOn(it.task, day)) }
         // Before-bed practice goes last: it's meant for later.
         return habits.map { OpenItem("habit", it.id, it.name) } + tasks.map { OpenItem("task", it.id, it.name) } +
             bedtime.map { OpenItem("habit", it.id, "${it.name} (when you go to bed)") }

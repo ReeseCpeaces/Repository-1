@@ -86,12 +86,22 @@ class Grove:
     def total_days(self, history: dict, h: dict) -> int:
         return sum(1 for day in history.get("days", {}) if self.is_done(history, day, h))
 
-    def tasks_on(self, setup: dict, d: date) -> list[dict]:
+    def done_earlier_in_week(self, history: dict | None, task_id: str, d: date) -> bool:
+        """Checked off on a day before d in the same Monday-start week."""
+        if not history:
+            return False
+        ws = self.week_start(d)
+        return any(task_id in history.get("days", {}).get((ws + timedelta(days=i)).isoformat(), {}).get("tasks", {}) for i in range((d - ws).days))
+
+    def tasks_on(self, setup: dict, d: date, history: dict | None = None) -> list[dict]:
         out = []
         wd = self.weekday_index(d)
         last = (date(d.year + d.month // 12, d.month % 12 + 1, 1) - timedelta(days=1)).day
         for t in setup.get("tasks", []):
-            if t.get("monthDay", 0) > 0:
+            if t.get("anyDay"):
+                # Once a week, any day: every day until it's checked off (same as the app).
+                on = not self.done_earlier_in_week(history, t["id"], d)
+            elif t.get("monthDay", 0) > 0:
                 # Monthly; in shorter months a 29th-31st falls on the last day (same as the app).
                 on = d.day == min(t["monthDay"], last)
             elif any(t.get("days", [])):
@@ -99,7 +109,8 @@ class Grove:
             else:
                 on = t.get("date") == d.isoformat()
             if on:
-                out.append({"id": t["id"], "name": t["name"], "time": t.get("time", ""), "list": t.get("list", "")})
+                out.append({"id": t["id"], "name": t["name"], "time": t.get("time", ""), "list": t.get("list", ""),
+                            "anyDay": bool(t.get("anyDay")), "remindDays": t.get("days", [])})
         for h in setup.get("holyDays", []):
             hd = date.fromisoformat(h["date"])
             if hd == d:
@@ -786,7 +797,8 @@ class Grove:
         open_habits = [h for h in setup["habits"] if h.get("role") != "morning" and self.scheduled(h, d) and not self.is_done(history, day, h)]
         habits = [h["name"] for h in open_habits if h.get("role") != "bedtime"]
         bedtime = [f"{h['name']} (when you go to bed)" for h in open_habits if h.get("role") == "bedtime"]
-        tasks = [t["name"] for t in self.tasks_on(setup, d) if t["id"] not in rec.get("tasks", {})]
+        tasks = [t["name"] for t in self.tasks_on(setup, d, history) if t["id"] not in rec.get("tasks", {})
+                 and (not t.get("anyDay") or t["remindDays"][self.weekday_index(d)])]
         return habits + tasks + bedtime
 
     # ----- reports -----
@@ -849,11 +861,12 @@ class Grove:
         lines += [f"- [{'x' if t.get('done') else ' '}] {'! ' if t.get('high') else ''}{t['name']} (id {t['id']})"
                   + (f", by {t['due']}" if t.get("due") else "") + (f", {t['list']}" if t.get("list") else "") for t in todos] or ["- none"]
         lines += ["", "Tasks today:"]
-        tasks = self.tasks_on(setup, d)
+        tasks = self.tasks_on(setup, d, history)
         if not tasks:
             lines.append("- none")
         for t in tasks:
-            lines.append(f"- [{'x' if t['id'] in rec.get('tasks', {}) else ' '}] {t['time']} {t['name']} ({t['list']}, id {t['id']})")
+            when = "any day this week" if t.get("anyDay") else t["time"]
+            lines.append(f"- [{'x' if t['id'] in rec.get('tasks', {}) else ' '}] {when} {t['name']} ({t['list']}, id {t['id']})")
         upcoming = sorted((h for h in setup.get("holyDays", []) if date.fromisoformat(h["date"]) >= d), key=lambda h: h["date"])[:3]
         if upcoming:
             lines += ["", "Upcoming holy days:"]
@@ -1004,16 +1017,16 @@ class Grove:
 
     def add_task(self, name: str, time_due: str = "16:30", days: list[str] | None = None, date_due: str | None = None, list_name: str = "Inbox",
                  reminders: list[str] | None = None, nag: bool = True, nag_minutes: int = 30, first_of_month: bool = False,
-                 prop: str = "", high: bool = False, month_day: int | None = None) -> dict:
+                 prop: str = "", high: bool = False, month_day: int | None = None, any_day: bool = False) -> dict:
         setup = self.load_setup()
-        md = self.check_month_day(month_day) or 0
+        md = 0 if any_day else (self.check_month_day(month_day) or 0)
         flags = [False] * 7 if md else self.parse_days(days, [False] * 7)
-        if not md and not any(flags) and not date_due:
+        if not any_day and not md and not any(flags) and not date_due:
             raise GroveError("A one-time task needs date_due (YYYY-MM-DD); a weekly task needs days; a monthly task needs month_day.")
         t = {
             "id": self.new_id("t", setup), "name": name.strip(), "list": list_name, "days": flags,
-            "date": "" if (md or any(flags)) else self.check_date(date_due), "time": self.check_times([time_due])[0],
-            "firstOfMonth": first_of_month and any(flags), "prop": prop, "high": high,
+            "date": "" if (any_day or md or any(flags)) else self.check_date(date_due), "time": self.check_times([time_due])[0],
+            "firstOfMonth": first_of_month and any(flags) and not any_day, "prop": prop, "high": high, "anyDay": any_day,
             "reminders": self.check_times(reminders) if reminders is not None else [time_due], "nag": nag, "nagMinutes": nag_minutes,
             "monthDay": md,
         }
@@ -1038,11 +1051,19 @@ class Grove:
                 t["date"] = self.check_date(v)
                 t["days"] = [False] * 7
                 t["monthDay"] = 0
+                t["anyDay"] = False
             elif k == "month_day":
                 t["monthDay"] = self.check_month_day(v)
                 if t["monthDay"]:
                     t["days"] = [False] * 7
                     t["date"] = ""
+                    t["anyDay"] = False
+            elif k == "any_day":
+                t["anyDay"] = bool(v)
+                if v:
+                    t["date"] = ""
+                    t["monthDay"] = 0
+                    t["firstOfMonth"] = False
             elif k == "time_due":
                 t["time"] = self.check_times([v])[0]
             elif k == "reminders":

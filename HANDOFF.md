@@ -100,6 +100,10 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
   backup cutoff hour (default 2 PM). So Before-bed practice at 3 AM counts for the previous day.
+- **Once a week, any day** (`Task.anyDay`): shows every day from Monday until checked off (the day it's done it
+  stays crossed out), then waits for next week (`Logic.doneEarlierInWeek`). Its `days` are only the days its
+  reminders fire and the 9 PM check-in lists it (`Logic.remindsOn`). Nature time (t3) was converted on Oct 29, 2026
+  with reminders Wed + Sat (`migratedNatureWeek`). Connector: `any_day` on add/update task.
 - **Floating to-dos** (`Todo` in `Models.kt`, rules in `data/Todos.kt`, UI in `ui/TodoScreens.kt`): no date;
   shown in a "To-do" section on Today until checked off, crossed out for the rest of that day, then
   hidden (pruned after 60 days). Optional list, high priority, "do by" date and daily reminder time.

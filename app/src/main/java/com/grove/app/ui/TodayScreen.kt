@@ -144,7 +144,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                         })
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             ItemTitle((if (t.task?.high == true) "! " else "") + t.name, done)
-                            Text("${Logic.fmtTime(t.time)} · ${t.list}", fontSize = 12.sp, color = GroveColors.Muted)
+                            Text((if (t.task?.anyDay == true) "Any day this week" else Logic.fmtTime(t.time)) + " · ${t.list}", fontSize = 12.sp, color = GroveColors.Muted)
                         }
                         if (t.task != null) IconButton(onClick = { go(Screen.EditTask(t.id)) }) { Icon(Icons.Filled.Edit, "Edit ${t.name}") }
                     }
@@ -175,6 +175,8 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             }
             items(data.tasks, key = { "a" + it.id }) { t ->
                 val whenText = when {
+                    t.anyDay -> "Once a week, any day" + t.days.mapIndexedNotNull { i, on -> if (on) WEEKDAYS[i].take(3) else null }
+                        .takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = " (reminds ", postfix = ")").orEmpty()
                     t.monthDay > 0 -> "Monthly on the ${ordinal(t.monthDay)}"
                     t.firstOfMonth -> "First ${WEEKDAYS[t.days.indexOf(true)].removeSuffix("s")} of the month"
                     t.repeating -> t.days.mapIndexedNotNull { i, on -> if (on) WEEKDAYS[i] else null }.joinToString(", ")

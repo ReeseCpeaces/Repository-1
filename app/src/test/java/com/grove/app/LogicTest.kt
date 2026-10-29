@@ -465,4 +465,20 @@ class LogicTest {
         assertTrue(t8, !t8.contains("Paw paw · (min") && t8.endsWith("## Season plan\nkeep\n"))
         assertEquals(1, d8.explore.size)
     }
+
+    @Test fun natureTimeFloatsAllWeekUntilDone() {
+        var d = migrated() // Monday Oct 19
+        val t3 = d.tasks.first { it.id == "t3" }
+        assertTrue(t3.anyDay)
+        val days = (19..25).map { LocalDate.parse("2026-10-$it") }
+        assertTrue(days.all { day -> Logic.tasksOn(d, day).any { it.id == "t3" } }) // every day of the week
+        assertTrue(Logic.checkInItems(d).none { it.id == "t3" }) // Monday isn't a reminder day
+        // Done Tuesday: shown (crossed out) that day, gone the rest of the week, back next Monday.
+        d = Logic.toggleTask(d.copy(currentDay = "2026-10-20"), "t3", LocalDateTime.parse("2026-10-20T12:00"))
+        assertTrue(Logic.tasksOn(d, LocalDate.parse("2026-10-20")).any { it.id == "t3" })
+        assertTrue(Logic.tasksOn(d, LocalDate.parse("2026-10-21")).none { it.id == "t3" })
+        assertTrue(Logic.tasksOn(d, LocalDate.parse("2026-10-26")).any { it.id == "t3" })
+        assertEquals(true, com.grove.app.obsidian.ObsidianSync.properties(d, "2026-10-20")["fifteen in nature"])
+        assertEquals(d, Migrate.run(d)) // not converted twice
+    }
 }

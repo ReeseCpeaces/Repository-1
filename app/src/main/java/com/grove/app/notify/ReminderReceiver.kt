@@ -122,7 +122,8 @@ class ReminderReceiver : BroadcastReceiver() {
             if (h.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, h.nagMinutes, data)
         } else {
             val t = data.tasks.firstOrNull { it.id == id } ?: return
-            if (Logic.isTaskDone(data, data.currentDay, id)) return
+            val day = Logic.groveToday(data)
+            if (Logic.isTaskDone(data, data.currentDay, id) || (t.anyDay && Logic.doneEarlierInWeek(data, id, day))) return
             Notifier.showReminder(context, kind, id, t.name, "Due ${Logic.fmtTime(t.time)} · ${t.list}", snooze)
             if (t.nag) AlarmScheduler.scheduleFollowUp(context, kind, id, t.nagMinutes, data)
         }

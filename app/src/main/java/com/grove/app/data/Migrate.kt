@@ -64,6 +64,14 @@ object Migrate {
         // t12 ("My Deepest Me: start this week's prompt") stays gone, even if an older grove.json brings it back.
         if (d.migratedPrompt && d.tasks.any { it.id == "t12" }) d = d.copy(tasks = d.tasks.filter { it.id != "t12" })
         d = Prompts.advance(d)
+        // Oct 29, 2026: "Nature time (15+ min)" can happen any day of the week, so it floats all week
+        // instead of landing on Wednesday. Reminders on Wednesday and Saturday while it's still open.
+        if (!d.migratedNatureWeek) {
+            d = d.copy(
+                tasks = d.tasks.map { if (it.id == "t3" && !it.anyDay) it.copy(anyDay = true, days = List(7) { i -> i == 3 || i == 6 }, monthDay = 0, date = "", firstOfMonth = false) else it },
+                migratedNatureWeek = true,
+            )
+        }
         // Oct 2026: Druid exploration (plant study), 20 hours by the 2027 summer solstice.
         if (!d.migratedExplore) {
             if (d.goals.none { it.kind == GoalKind.MINUTES }) {

@@ -63,7 +63,7 @@ object AlarmScheduler {
             }
             for (t in Logic.tasksOn(data, date)) {
                 val task = t.task ?: continue
-                if (!Logic.isTaskDone(data, key, t.id)) schedule(ReminderReceiver.KIND_TASK, t.id, date, task.reminders)
+                if (!Logic.isTaskDone(data, key, t.id) && Logic.remindsOn(task, date)) schedule(ReminderReceiver.KIND_TASK, t.id, date, task.reminders)
             }
         }
 

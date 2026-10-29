@@ -54,8 +54,13 @@ data class Task(
     val nagMinutes: Int = 30,
     /** 1–31: repeats monthly on this day of the month (overrides [days] and [date]). 0 = not monthly. */
     val monthDay: Int = 0,
+    /**
+     * Once a week, any day: shows every day of the week (Monday start) until it's checked off, then
+     * waits for next week. [days] are then only the days its reminders fire (if it's still open).
+     */
+    val anyDay: Boolean = false,
 ) {
-    val repeating: Boolean get() = monthDay > 0 || days.any { it }
+    val repeating: Boolean get() = anyDay || monthDay > 0 || days.any { it }
 }
 
 /** A weekly-goal nudge: on [weekday] (Sunday-first, 0–6) at [time], if progress is under [below] × the week's target. */
@@ -251,6 +256,8 @@ data class AppData(
     val explore: List<ExploreSession> = emptyList(),
     val exploreDeleted: List<String> = emptyList(),
     val migratedExplore: Boolean = false,
+    /** Nature time (t3) became a once-a-week, any-day task. */
+    val migratedNatureWeek: Boolean = false,
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }
