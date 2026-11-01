@@ -97,6 +97,15 @@ object NoteText {
         return text + sep + "\n## Daily Log\n" + block + "\n"
     }
 
+    /** Names of to-dos ticked ("- [x] To-do: name") inside Grove's section. */
+    fun tickedTodos(text: String): List<String> {
+        val s = text.indexOf(START)
+        val e = text.indexOf(END)
+        if (s < 0 || e < s) return emptyList()
+        return text.substring(s, e).replace("\r\n", "\n").split("\n")
+            .mapNotNull { Regex("""^\s*- \[[xX]\] To-do: (.+?)\s*$""").matchEntire(it)?.groupValues?.get(1) }
+    }
+
     /** Simple `key: value` pairs from the frontmatter (quotes stripped). Nested values are skipped. */
     fun frontmatter(text: String): Map<String, String> {
         val lines = text.replace("\r\n", "\n").split("\n")

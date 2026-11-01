@@ -109,6 +109,11 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   hidden (pruned after 60 days). Optional list, high priority, "do by" date and daily reminder time.
   Not in the 9 PM check-in. Done ones appear in that day's note summary as "- [x] To-do: …".
   New via the + menu or the "To-do (no date)" chip in the new-task form. Ids use prefix "d".
+  - **In the daily note:** Grove's section of *today's* note lists open to-dos as `- [ ] To-do: …`; a finished one
+    leaves the list (Nov 1, 2026: Reese's template no longer has a Dataview to-do list, so this is the one list).
+    Ticking one there checks it off in Grove (`NoteText.tickedTodos`, read when the note syncs and when the app
+    opens). When the day rolls over, yesterday's section keeps `- [x] To-do: …` for what was finished that day
+    (`Settings.todoDoneRecord`, on by default).
   - **Linked to an Obsidian note** (`Settings.todoNotePath`, e.g. "To-do.md"; `obsidian/TodoNote.kt`,
     runs on one worker thread): the note's `- [ ]` checklist and Grove's to-dos stay in step both ways.
     Each to-do remembers how it looked in the note at the last sync (`inNote`, `noteName`, `noteDone`),

@@ -481,4 +481,23 @@ class LogicTest {
         assertEquals(true, com.grove.app.obsidian.ObsidianSync.properties(d, "2026-10-20")["fifteen in nature"])
         assertEquals(d, Migrate.run(d)) // not converted twice
     }
+
+    @Test fun todaysNoteListsOpenToDosAndDropsFinishedOnes() {
+        val T = com.grove.app.data.Todos
+        var d = T.add(T.add(migrated(), "Call the vet"), "Fix the gate")
+        d = T.toggle(d, d.todos.first { it.name == "Fix the gate" }.id)
+        val today = com.grove.app.obsidian.ObsidianSync.summary(d)
+        assertTrue(today, today.contains("- [ ] To-do: Call the vet") && !today.contains("Fix the gate"))
+        // Once the day is past, its note records what was finished (unless that's turned off).
+        val later = d.copy(currentDay = "2026-10-20")
+        val past = com.grove.app.obsidian.ObsidianSync.summary(later, "2026-10-19")
+        assertTrue(past, past.contains("- [x] To-do: Fix the gate") && !past.contains("Call the vet"))
+        val off = later.copy(settings = later.settings.copy(todoDoneRecord = false))
+        assertTrue(!com.grove.app.obsidian.ObsidianSync.summary(off, "2026-10-19").contains("To-do"))
+        // Ticked inside Grove's section of the note -> checked off in Grove.
+        val note = "x\n${com.grove.app.obsidian.NoteText.START}\n- [x] To-do: call the vet\n- [ ] To-do: Other\n${com.grove.app.obsidian.NoteText.END}\n- [x] To-do: Outside\n"
+        assertEquals(listOf("call the vet"), com.grove.app.obsidian.NoteText.tickedTodos(note))
+        val checked = T.checkByName(d, listOf("call the vet"))
+        assertEquals("2026-10-19", checked.todos.first { it.name == "Call the vet" }.done)
+    }
 }

@@ -89,6 +89,9 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                     saveSettings { st -> st.copy(linePromptOff = if (on) st.linePromptOff - item.key else (st.linePromptOff + item.key).distinct()) }
                 }
             }
+            SwitchRow("Record finished to-dos in past notes", "Today's note lists open to-dos; a checked one leaves the list. This keeps \"- [x] To-do\" lines in earlier days' notes.", s.todoDoneRecord) { on ->
+                saveSettings { it.copy(todoDoneRecord = on) }
+            }
             var todoNote by remember { mutableStateOf(s.todoNotePath) }
             OutlinedTextField(todoNote, { todoNote = it; saveSettings { st -> st.copy(todoNotePath = it.trim()) } },
                 label = { Text("To-do note") }, supportingText = { Text("e.g. To-do.md. Its \"- [ ]\" checklist and Grove's to-dos stay in step both ways. Empty = not linked.") },

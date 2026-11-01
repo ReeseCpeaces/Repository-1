@@ -25,10 +25,12 @@ object ObsidianSync {
         if (new.settings.vaultUri.isEmpty()) return
         // Earlier days that changed (a check-in filled in later) get their own note updated too.
         val earlier = if (old == null) emptySet() else (old.days.keys + new.days.keys)
-            .filter { it != new.currentDay && old.days[it] != new.days[it] }.toSet()
+            .filter { it != new.currentDay && old.days[it] != new.days[it] }.toSet() +
+            // When the day rolls over, yesterday's note swaps its open to-do list for what got done.
+            (if (old != null && old.currentDay.isNotEmpty() && old.currentDay != new.currentDay) setOf(old.currentDay) else emptySet())
         if (old != null && earlier.isEmpty() && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits &&
             old.tasks == new.tasks && old.goals == new.goals && old.books == new.books && old.explore == new.explore &&
-            com.grove.app.data.Todos.doneOn(old, new.currentDay) == com.grove.app.data.Todos.doneOn(new, new.currentDay)) return
+            old.todos == new.todos) return
         // Read the latest data when the job runs, so queued jobs never write the same lines twice.
         worker.execute { runCatching { sync(context, Store.get(context), earlier) }.onFailure { Log.w(TAG, "Daily note sync failed", it) } }
     }
@@ -71,7 +73,10 @@ object ObsidianSync {
             val at = rec.tasks[t.id]
             lines += "- [${if (at != null) "x" else " "}] ${t.name}${at?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}"
         }
-        for (t in com.grove.app.data.Todos.doneOn(data, day)) lines += "- [x] To-do: ${t.name}"
+        // Today's note lists the open to-dos (one leaves the list once it's checked off). An earlier
+        // day's note keeps a record of the ones finished that day, if that's turned on.
+        if (day == data.currentDay) for (t in com.grove.app.data.Todos.open(data)) lines += "- [ ] To-do: ${t.name}"
+        else if (data.settings.todoDoneRecord) for (t in com.grove.app.data.Todos.doneOn(data, day)) lines += "- [x] To-do: ${t.name}"
         for (g in data.goals) {
             if (g.kind == com.grove.app.data.GoalKind.PROMPT) {
                 lines += "${g.name}: " + com.grove.app.data.Prompts.status(g.copy(title = ""), d).substringBefore(" · aim")
@@ -99,13 +104,22 @@ object ObsidianSync {
     }
 
     /** Ticks properties, refreshes Grove's summary and adds pending lines in [day]'s note. */
-    private fun syncDay(context: Context, root: DocumentFile, data: AppData, day: String, create: Boolean) {
+    private fun syncDay(context: Context, root: DocumentFile, snapshot: AppData, day: String, create: Boolean) {
+        var data = snapshot
         val d = Logic.date(day)
         val rel = NoteText.path(data.settings.dailyNotePath, d)
         val note = (if (create) findOrCreate(context, root, rel, data, d) else find(root, rel)) ?: return
         val resolver = context.contentResolver
         // If the note can't be read, leave it alone rather than risk writing over it.
         val before = resolver.openInputStream(note.uri)?.use { it.readBytes().decodeToString() } ?: return
+        if (day == data.currentDay) {
+            // To-dos ticked inside Grove's section of today's note count as checked off.
+            val ticked = NoteText.tickedTodos(before)
+            if (ticked.isNotEmpty() && com.grove.app.data.Todos.open(data).any { t -> ticked.any { it.equals(t.name.trim(), ignoreCase = true) } }) {
+                Store.update(context) { com.grove.app.data.Todos.checkByName(it, ticked) }
+                data = Store.get(context)
+            }
+        }
         val rec = data.days[day] ?: DayRecord()
         val pending = rec.lines.drop(rec.linesWritten)
         val after = NoteText.appendLogLines(NoteText.applySummary(NoteText.applyProperties(before, properties(data, day)), summary(data, day)), pending)

@@ -202,6 +202,8 @@ data class Settings(
     val todoNotePath: String = "",
     /** The plant-study note whose "## Session log" lines are kept in step with Grove's sessions. */
     val plantStudyNotePath: String = "Druidry/Druid Exploration - Plant Study.md",
+    /** Past days' notes keep "- [x] To-do: …" for to-dos finished that day (today's note lists only open ones). */
+    val todoDoneRecord: Boolean = true,
 )
 
 /** What got done on one logical day. */

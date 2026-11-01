@@ -16,6 +16,12 @@ object Todos {
     fun toggle(data: AppData, id: String): AppData =
         data.copy(todos = data.todos.map { if (it.id == id) it.copy(done = if (it.done.isEmpty()) data.currentDay else "") else it })
 
+    /** Check off open to-dos by name (ticked in the daily note). */
+    fun checkByName(data: AppData, names: List<String>): AppData {
+        val keys = names.map { it.trim().lowercase() }.toSet()
+        return data.copy(todos = data.todos.map { if (it.done.isEmpty() && it.name.trim().lowercase() in keys) it.copy(done = data.currentDay) else it })
+    }
+
     fun add(data: AppData, name: String, list: String = "", high: Boolean = false, due: String = "", remind: String = ""): AppData {
         val (id, d) = Logic.allocateId(data, "d")
         return d.copy(todos = d.todos + Todo(id, name.trim(), list.trim(), high, due, remind, created = data.currentDay))

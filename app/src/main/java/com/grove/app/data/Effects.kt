@@ -38,6 +38,8 @@ object Effects {
         TodoNote.syncAsync(context, null, Store.get(context))
         // Create this week's prompt note and write any waiting thoughts.
         PromptNotes.syncAsync(context, null, Store.get(context))
+        // Pick up to-dos ticked in today's note.
+        ObsidianSync.syncAsync(context, null, Store.get(context))
         // Pick up plant-study sessions added in the note by hand or by Claude.
         ExploreNote.syncAsync(context, null, Store.get(context))
         Store.refreshDay(context)
