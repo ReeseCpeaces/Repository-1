@@ -322,7 +322,7 @@ class LogicTest {
 
     @Test fun todosStayUntilCheckedOffThenLeaveTheNextDay() {
         var d = com.grove.app.data.Todos.add(migrated(), "Renew registration", due = "2026-11-30")
-        d = com.grove.app.data.Todos.add(d, "Call the vet", high = true)
+        d = com.grove.app.data.Todos.add(d, "Call the vet", priority = 8)
         assertEquals(listOf("Call the vet", "Renew registration"), com.grove.app.data.Todos.shown(d).map { it.name })
         val vet = d.todos.first { it.name == "Call the vet" }.id
         d = com.grove.app.data.Todos.toggle(d, vet)
@@ -499,5 +499,24 @@ class LogicTest {
         assertEquals(listOf("call the vet"), com.grove.app.obsidian.NoteText.tickedTodos(note))
         val checked = T.checkByName(d, listOf("call the vet"))
         assertEquals("2026-10-19", checked.todos.first { it.name == "Call the vet" }.done)
+    }
+
+    @Test fun toDosSortByPriorityThenOldestAndColorByBand() {
+        val T = com.grove.app.data.Todos
+        var d = migrated()
+        d = T.add(d, "Low", priority = 1)
+        d = T.add(d, "Old default")
+        d = T.add(d, "Urgent", priority = 10)
+        d = T.add(d, "Newer default")
+        d = d.copy(todos = d.todos + com.grove.app.data.Todo("d999", "From before", created = "2026-10-01")) // no priority set = 5
+        assertEquals(listOf("Urgent", "From before", "Old default", "Newer default", "Low"), T.open(d).map { it.name })
+        d = T.toggle(d, d.todos.first { it.name == "Urgent" }.id)
+        assertEquals("Urgent", T.shown(d).last().name) // checked off: below the open ones
+        d = T.setPriority(d, d.todos.first { it.name == "Low" }.id, 42)
+        assertEquals(10, d.todos.first { it.name == "Low" }.priority) // kept to 1-10
+        assertEquals(listOf(0, 0, 1, 1, 2, 2, 3, 3, 4, 4), (10 downTo 1).map { T.band(it) })
+        // Older saved data without the field reads as 5.
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        assertEquals(5, json.decodeFromString(com.grove.app.data.Todo.serializer(), """{"id":"d1","name":"x"}""").priority)
     }
 }

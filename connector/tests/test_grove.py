@@ -267,7 +267,7 @@ def test_todos():
     assert t["id"] == "d27"
     g.add_todo("Call the vet", high=True)
     text = g.overview()
-    assert "- [ ] ! Call the vet (id d28)" in text and "- [ ] Renew registration (id d27), by 2026-11-30" in text
+    assert "- [ ] P5 (yellow) Renew registration (id d27), by 2026-11-30" in text and "- [ ] P5 (yellow) Call the vet (id d28)" in text
     g.update_todo("d28", done=True)
     assert g.load_setup()["todos"][1]["done"] == "2026-10-15"
     g.update_settings(todo_note_path="To-do.md")
@@ -368,6 +368,28 @@ def test_once_a_week_any_day_task():
     assert "Nature time" not in g.overview()  # waits for next week
     from datetime import date
     assert [x["name"] for x in g.tasks_on(g.load_setup(), date(2026, 10, 19), g.load_history())] == ["Nature time (15+ min)"]
+
+
+def test_todo_priorities():
+    g = Grove(make_vault())
+    g.add_todo("Low", priority=1)
+    g.add_todo("Old default")  # 5
+    g.add_todo("Urgent", priority=10)
+    g.add_todo("Newer default", priority=5)
+    setup = g.load_setup()
+    setup["todos"].append({"id": "d99", "name": "From before priorities", "done": "", "created": "2026-10-01"})  # no field = 5
+    g.save_setup(setup)
+    names = [t["name"] for t in g.shown_todos(g.load_setup(), "2026-10-15")]
+    assert names == ["Urgent", "From before priorities", "Old default", "Newer default", "Low"]
+    assert "- [ ] P10 (red) Urgent" in g.overview() and "- [ ] P1 (blue-grey) Low" in g.overview()
+    g.update_todo("d27", priority=8)
+    assert g.load_setup()["todos"][0]["priority"] == 8
+    for bad in (0, 11, "high", 5.5):
+        try:
+            g.update_todo("d27", priority=bad)
+            raise AssertionError("expected GroveError")
+        except GroveError:
+            pass
 
 
 if __name__ == "__main__":

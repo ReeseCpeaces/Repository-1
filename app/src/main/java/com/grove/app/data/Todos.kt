@@ -6,11 +6,33 @@ package com.grove.app.data
  */
 object Todos {
     /** Open to-dos, plus ones checked off today (shown crossed out until the day ends). High first, then by due date. */
-    fun shown(data: AppData): List<Todo> = data.todos
-        .filter { it.done.isEmpty() || it.done == data.currentDay }
-        .sortedWith(compareBy<Todo>({ it.done.isNotEmpty() }, { !it.high }, { it.due.ifEmpty { "9999" } }, { it.created }))
+    fun shown(data: AppData): List<Todo> = sorted(data.todos.filter { it.done.isEmpty() || it.done == data.currentDay })
 
-    fun open(data: AppData): List<Todo> = data.todos.filter { it.done.isEmpty() }
+    /** Open to-dos, highest priority first. */
+    fun open(data: AppData): List<Todo> = sorted(data.todos.filter { it.done.isEmpty() })
+
+    const val MIN_PRIORITY = 1
+    const val MAX_PRIORITY = 10
+    const val DEFAULT_PRIORITY = 5
+
+    fun priority(t: Todo): Int = t.priority.coerceIn(MIN_PRIORITY, MAX_PRIORITY)
+
+    /** Open ones first, then highest priority (10) first, then oldest first (day added, then id order). */
+    fun sorted(todos: List<Todo>): List<Todo> = todos.sortedWith(
+        compareBy<Todo>({ it.done.isNotEmpty() }, { -priority(it) }, { it.created }, { it.id.drop(1).toIntOrNull() ?: Int.MAX_VALUE }),
+    )
+
+    /** Color band for a priority: 10–9 red, 8–7 orange, 6–5 yellow, 4–3 green, 2–1 blue-grey. */
+    fun band(p: Int): Int = when (p.coerceIn(MIN_PRIORITY, MAX_PRIORITY)) {
+        10, 9 -> 0
+        8, 7 -> 1
+        6, 5 -> 2
+        4, 3 -> 3
+        else -> 4
+    }
+
+    fun setPriority(data: AppData, id: String, p: Int): AppData =
+        data.copy(todos = data.todos.map { if (it.id == id) it.copy(priority = p.coerceIn(MIN_PRIORITY, MAX_PRIORITY)) else it })
 
     /** Check a to-do off for Grove's day, or reopen it. */
     fun toggle(data: AppData, id: String): AppData =
@@ -22,9 +44,10 @@ object Todos {
         return data.copy(todos = data.todos.map { if (it.done.isEmpty() && it.name.trim().lowercase() in keys) it.copy(done = data.currentDay) else it })
     }
 
-    fun add(data: AppData, name: String, list: String = "", high: Boolean = false, due: String = "", remind: String = ""): AppData {
+    fun add(data: AppData, name: String, list: String = "", high: Boolean = false, due: String = "", remind: String = "", priority: Int = DEFAULT_PRIORITY): AppData {
         val (id, d) = Logic.allocateId(data, "d")
-        return d.copy(todos = d.todos + Todo(id, name.trim(), list.trim(), high, due, remind, created = data.currentDay))
+        return d.copy(todos = d.todos + Todo(id, name.trim(), list.trim(), high, due, remind, created = data.currentDay,
+            priority = priority.coerceIn(MIN_PRIORITY, MAX_PRIORITY)))
     }
 
     /** Delete a to-do. One that's in the to-do note is also removed from the note at the next sync. */

@@ -474,24 +474,52 @@ class Grove:
 
     # ----- floating to-dos (same as Todos.kt; the app keeps them in step with the to-do note) -----
 
-    @staticmethod
-    def shown_todos(setup: dict, day: str) -> list[dict]:
-        todos = [t for t in setup.get("todos", []) if not t.get("done") or t.get("done") == day]
-        return sorted(todos, key=lambda t: (bool(t.get("done")), not t.get("high"), t.get("due") or "9999", t.get("created", "")))
+    DEFAULT_PRIORITY = 5
 
-    def add_todo(self, name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None) -> dict:
+    @classmethod
+    def todo_priority(cls, t: dict) -> int:
+        """1-10, 10 most important; missing (older to-dos) = 5."""
+        p = t.get("priority")
+        return max(1, min(10, p)) if isinstance(p, int) and not isinstance(p, bool) else cls.DEFAULT_PRIORITY
+
+    @staticmethod
+    def priority_band(p: int) -> str:
+        """Color band, same as the app: 10-9 red, 8-7 orange, 6-5 yellow, 4-3 green, 2-1 blue-grey."""
+        return "red" if p >= 9 else "orange" if p >= 7 else "yellow" if p >= 5 else "green" if p >= 3 else "blue-grey"
+
+    @classmethod
+    def sorted_todos(cls, todos: list[dict]) -> list[dict]:
+        """Open first, then highest priority first, then oldest first (same as Todos.sorted)."""
+        def idnum(t):
+            m = re.fullmatch(r"[a-z](\d+)", t.get("id", ""))
+            return int(m.group(1)) if m else 1 << 31
+        return sorted(todos, key=lambda t: (bool(t.get("done")), -cls.todo_priority(t), t.get("created", ""), idnum(t)))
+
+    @classmethod
+    def shown_todos(cls, setup: dict, day: str) -> list[dict]:
+        return cls.sorted_todos([t for t in setup.get("todos", []) if not t.get("done") or t.get("done") == day])
+
+    @staticmethod
+    def check_priority(p) -> int:
+        if not isinstance(p, int) or isinstance(p, bool) or not 1 <= p <= 10:
+            raise GroveError(f"priority must be a whole number from 1 to 10 (10 = most important). Got {p!r}.")
+        return p
+
+    def add_todo(self, name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None,
+                 priority: int | None = None) -> dict:
         if not name.strip():
             raise GroveError("A to-do needs a name.")
+        priority = self.DEFAULT_PRIORITY if priority is None else self.check_priority(priority)
         setup, history = self.load_setup(), self.load_history()
         t = {"id": self.new_id("d", setup), "name": name.strip(), "list": list_name.strip(), "high": high, "due": self.check_date(due) or "",
              "remind": (self.check_times([remind]) or [""])[0] if remind else "", "done": "", "created": history["currentDay"],
-             "inNote": False, "noteName": "", "noteDone": False}
+             "inNote": False, "noteName": "", "noteDone": False, "priority": priority}
         setup.setdefault("todos", []).append(t)
         self.save_setup(setup)
         return t
 
     def update_todo(self, todo_id: str, name: str | None = None, due: str | None = None, list_name: str | None = None, high: bool | None = None,
-                    remind: str | None = None, done: bool | None = None, day: str | None = None) -> dict:
+                    remind: str | None = None, done: bool | None = None, day: str | None = None, priority: int | None = None) -> dict:
         setup, history = self.load_setup(), self.load_history()
         t = self.find(setup.get("todos", []), todo_id, "to-do")
         if name is not None:
@@ -506,6 +534,8 @@ class Grove:
             t["high"] = high
         if remind is not None:
             t["remind"] = self.check_times([remind])[0] if remind else ""
+        if priority is not None:
+            t["priority"] = self.check_priority(priority)
         if done is not None:
             t["done"] = (self.check_date(day) or history["currentDay"]) if done else ""
         self.save_setup(setup)
@@ -858,7 +888,7 @@ class Grove:
         lines += ["", f"Notifications: {check}, quiet hours {quiet}. Still open today: {', '.join(open_items) or 'nothing'}"]
         todos = self.shown_todos(setup, day)
         lines += ["", f"To-dos (no date, until checked off){' · linked to ' + setup['settings']['todoNotePath'] if setup['settings'].get('todoNotePath') else ''}:"]
-        lines += [f"- [{'x' if t.get('done') else ' '}] {'! ' if t.get('high') else ''}{t['name']} (id {t['id']})"
+        lines += [f"- [{'x' if t.get('done') else ' '}] P{self.todo_priority(t)} ({self.priority_band(self.todo_priority(t))}) {t['name']} (id {t['id']})"
                   + (f", by {t['due']}" if t.get("due") else "") + (f", {t['list']}" if t.get("list") else "") for t in todos] or ["- none"]
         lines += ["", "Tasks today:"]
         tasks = self.tasks_on(setup, d, history)

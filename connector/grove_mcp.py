@@ -25,7 +25,8 @@ target of pages left / weeks left until the deadline (weeks start Monday). Log t
 grove_log_session and grove_log_pages.
 Each book can be linked to its note in the vault's Books folder (notePath); Grove writes pagesRead,
 lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
-in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off.
+in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off; each has a priority 1-10 (10 most important,
+default 5) and lists are sorted highest first.
 "My Deepest Me" is a weekly prompt goal: one numbered prompt a week (read Monday, finish by Friday;
 a slipped prompt stays open). "Druid exploration" counts plant-study minutes toward 20 hours by the
 deadline (weekly target = minutes left / weeks left); sessions live in the plant-study note's Session log. Never put the book's prompt text anywhere; only the user's own words. Changes made
@@ -157,18 +158,22 @@ def grove_update_book(book_id: str, title: str | None = None, pages: int | None 
 
 
 @mcp.tool()
-def grove_add_todo(name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None) -> str:
+def grove_add_todo(name: str, due: str | None = None, list_name: str = "", high: bool = False, remind: str | None = None,
+                   priority: int | None = None) -> str:
     """Add a floating to-do: no date, it stays on Grove's Today until checked off (and in the linked Obsidian to-do note).
-    due: optional "do by" YYYY-MM-DD. remind: optional daily reminder time HH:MM until done."""
-    return _run(grove.add_todo, name, due, list_name, high, remind)
+    due: optional "do by" YYYY-MM-DD. remind: optional daily reminder time HH:MM until done.
+    priority: 1-10, 10 most important (default 5); the list is sorted by it, highest first."""
+    return _run(grove.add_todo, name, due, list_name, high, remind, priority)
 
 
 @mcp.tool()
 def grove_update_todo(todo_id: str, name: str | None = None, due: str | None = None, list_name: str | None = None, high: bool | None = None,
-                      remind: str | None = None, done: bool | None = None, day: str | None = None) -> str:
+                      remind: str | None = None, done: bool | None = None, day: str | None = None,
+                      priority: int | None = None) -> str:
     """Change a to-do, or check it off with done=true (day defaults to Grove's today) / reopen it with done=false.
-    Use "" for due or remind to clear them."""
-    return _run(grove.update_todo, todo_id, name=name, due=due, list_name=list_name, high=high, remind=remind, done=done, day=day)
+    Use "" for due or remind to clear them. priority: 1-10 (10 most important)."""
+    return _run(grove.update_todo, todo_id, name=name, due=due, list_name=list_name, high=high, remind=remind, done=done, day=day,
+                priority=priority)
 
 
 @mcp.tool()

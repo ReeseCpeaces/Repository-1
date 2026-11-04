@@ -111,6 +111,17 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   hidden (pruned after 60 days). Optional list, high priority, "do by" date and daily reminder time.
   Not in the 9 PM check-in.
   New via the + menu or the "To-do (no date)" chip in the new-task form. Ids use prefix "d".
+  - **Priority (Nov 4, 2026):** each to-do has `priority`, a whole number 1–10 (10 = most important). It's stored
+    on each item of the top-level `todos` array in `Grove/grove.json`, e.g.
+    `{"id": "d31", "name": "Call the vet", "priority": 8, "done": "", "created": "2026-11-04", ...}`.
+    Missing (to-dos from before Nov 4) = 5; the app writes the field on every to-do from now on.
+    Order everywhere (Today, list widget, daily note, connector): open first, then priority high→low, then
+    oldest first (`created`, then the id number). Colors: 10–9 red `#E5534B`, 8–7 orange `#EA8A3A`,
+    6–5 yellow `#E3C44A`, 4–3 green `#8FCB8B`, 2–1 blue-grey `#93A6C2`, always shown with the number
+    (`Todos.sorted`/`band`, connector `sorted_todos`/`priority_band`). Picked with a 1–10 button grid when
+    adding (also in the share box); tap the badge or long-press a to-do to change it. The old `high` flag
+    is no longer shown or used for sorting. Connector: `priority` on `grove_add_todo`/`grove_update_todo`;
+    `grove_overview` lists to-dos as `P8 (orange) name`.
   - **In the daily note:** Grove's section of *today's* note lists open to-dos as `- [ ] To-do: …`; a finished one
     leaves the list (Nov 1, 2026: Reese's template no longer has a Dataview to-do list, so this is the one list).
     Ticking one there checks it off in Grove (`NoteText.tickedTodos`, read when the note syncs and when the app

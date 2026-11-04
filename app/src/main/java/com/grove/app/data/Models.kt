@@ -171,6 +171,8 @@ data class Todo(
     val inNote: Boolean = false,
     val noteName: String = "",
     val noteDone: Boolean = false,
+    /** 1–10, 10 most important. Missing in older data = 5. Sorts the list (highest first) and colors it. */
+    val priority: Int = 5,
 )
 
 @Serializable

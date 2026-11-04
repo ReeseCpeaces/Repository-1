@@ -63,6 +63,8 @@ private val MUTED = Color(0xFFA3AEA6)
 private val GREEN = Color(0xFF8FCB8B)
 private val AMBER = Color(0xFFE9A23B)
 private val DARK = Color(0xFF0F1713)
+/** To-do priority colors, same as the app: 10–9 red, 8–7 orange, 6–5 yellow, 4–3 green, 2–1 blue-grey. */
+private val PRIORITY = listOf(Color(0xFFE5534B), Color(0xFFEA8A3A), Color(0xFFE3C44A), Color(0xFF8FCB8B), Color(0xFF93A6C2))
 
 private fun style(color: Color, size: Int, bold: Boolean = false, strike: Boolean = false, center: Boolean = false) = TextStyle(
     color = ColorProvider(color), fontSize = size.sp,
@@ -342,7 +344,7 @@ class ListWidget : GlanceAppWidget() {
         provideContent { Content(Store.get(context)) }
     }
 
-    private data class Item(val kind: String, val id: String, val name: String, val detail: String, val done: Boolean, val high: Boolean)
+    private data class Item(val kind: String, val id: String, val name: String, val detail: String, val done: Boolean, val high: Boolean, val priority: Int = 0)
 
     @Composable
     private fun Content(data: AppData) {
@@ -351,7 +353,8 @@ class ListWidget : GlanceAppWidget() {
             Item("task", it.id, it.name, Logic.fmtTime(it.time), Logic.isTaskDone(data, data.currentDay, it.id), it.task?.high == true)
         }
         val todos = com.grove.app.data.Todos.shown(data).map { Item("todo", it.id, it.name, it.due.takeIf { d -> d.isNotEmpty() }?.let { d ->
-            Logic.date(d).let { x -> "by ${x.month.getDisplayName(JTextStyle.SHORT, Locale.US)} ${x.dayOfMonth}" } }.orEmpty(), it.done.isNotEmpty(), it.high) }
+            Logic.date(d).let { x -> "by ${x.month.getDisplayName(JTextStyle.SHORT, Locale.US)} ${x.dayOfMonth}" } }.orEmpty(), it.done.isNotEmpty(), false,
+            com.grove.app.data.Todos.priority(it)) }
         val rows = (tasks + todos).sortedBy { it.done }
         val open = rows.count { !it.done }
         val openApp = actionStartActivity<MainActivity>()
@@ -370,6 +373,8 @@ class ListWidget : GlanceAppWidget() {
                             GlanceModifier.width(24.dp).clickable(actionRunCallback<ToggleAction>(actionParametersOf(Widgets.KIND to r.kind, Widgets.ID to r.id))),
                             style(color, 15, center = true),
                         )
+                        if (r.priority > 0) Text("${r.priority}", GlanceModifier.width(20.dp),
+                            style(if (r.done) MUTED else PRIORITY[com.grove.app.data.Todos.band(r.priority)], 11, bold = true, center = true))
                         Text((if (r.high) "! " else "") + r.name, GlanceModifier.defaultWeight().clickable(openApp),
                             style(if (r.done) MUTED else TEXT, 12, strike = r.done), maxLines = 1)
                         if (r.detail.isNotEmpty()) Text(r.detail, style = style(MUTED, 10))

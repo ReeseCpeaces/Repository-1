@@ -41,6 +41,7 @@ class AddTodoActivity : ComponentActivity() {
                 var text by remember { mutableStateOf(shared) }
                 val lines = text.lines().map { it.trim().removePrefix("- ").removePrefix("• ").trim() }.filter { it.isNotEmpty() }
                 var split by remember { mutableStateOf(false) }
+                var priority by remember { mutableStateOf(Todos.DEFAULT_PRIORITY) }
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
                 AlertDialog(
@@ -56,13 +57,14 @@ class AddTodoActivity : ComponentActivity() {
                             if (lines.size > 1) {
                                 SwitchRow("One to-do per line", "Adds ${lines.size} to-dos", split) { split = it }
                             }
+                            PriorityPicker(priority) { priority = it }
                             Text("Stays on Today and the list widget until you check it off.", fontSize = 12.sp, color = GroveColors.Muted)
                         }
                     },
                     confirmButton = {
                         TextButton(enabled = lines.isNotEmpty(), onClick = {
                             val names = if (split) lines else listOf(lines.joinToString(" "))
-                            Store.update(applicationContext) { d -> names.fold(d) { acc, n -> Todos.add(acc, n.take(300)) } }
+                            Store.update(applicationContext) { d -> names.fold(d) { acc, n -> Todos.add(acc, n.take(300), priority = priority) } }
                             Toast.makeText(applicationContext, if (names.size == 1) "Added to Grove to-dos" else "Added ${names.size} to-dos", Toast.LENGTH_SHORT).show()
                             finish()
                         }) { Text("Add") }
