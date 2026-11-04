@@ -2,7 +2,8 @@
 
 This catches a new Claude session up on **Grove**, Reese's Android habit and task app, built in a
 cloud Claude Code session in October 2026. Repo: `ReeseCpeaces/Repository-1`, branch
-`ccr-786ce96c-m5lntg` (all work is on this branch; there is no `main` yet).
+`ccr-786ce96c-m5lntg` (all work is on this branch; there is no `main` yet). Latest as of Nov 1, 2026:
+Grove 0.1.27.
 
 ## About Reese (how to work with them)
 
@@ -32,8 +33,9 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   reminding until done" every N minutes, pinned-notification toggle.
 - **Streaks:** one missed day *pauses* a streak, two in a row *reset* it. Total days are tracked too.
   Only three daily habits keep streaks: Morning practice (h1), Before-bed practice (h2), 15-min house reset (h3).
-- **Weekly goals (no streaks, weeks start Monday):** `Goal` in `Models.kt`, created by `Migrate.kt`
-  from the retired habits h4/h5 (their history still counts).
+- **Weekly goals (no streaks, weeks start Monday):** `Goal` in `Models.kt`, all created by `Migrate.kt`.
+  Four of them: writing and field guides (below, which replaced the retired habits h4/h5, whose history
+  still counts), My Deepest Me (`prompt`) and Druid exploration (`minutes`), each described further down.
   - *Write the book* (`kind = sessions`): 3 a week, at most one per day, shows `1/3 this week` or `4/3 ★`.
     Nudges Thu 3 PM if 0 sessions, Sat 3 PM if under 3.
   - *Field guides* (`kind = pages`): pages logged per book (`DayRecord.pages`), Books screen with
@@ -107,7 +109,7 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - **Floating to-dos** (`Todo` in `Models.kt`, rules in `data/Todos.kt`, UI in `ui/TodoScreens.kt`): no date;
   shown in a "To-do" section on Today until checked off, crossed out for the rest of that day, then
   hidden (pruned after 60 days). Optional list, high priority, "do by" date and daily reminder time.
-  Not in the 9 PM check-in. Done ones appear in that day's note summary as "- [x] To-do: …".
+  Not in the 9 PM check-in.
   New via the + menu or the "To-do (no date)" chip in the new-task form. Ids use prefix "d".
   - **In the daily note:** Grove's section of *today's* note lists open to-dos as `- [ ] To-do: …`; a finished one
     leaves the list (Nov 1, 2026: Reese's template no longer has a Dataview to-do list, so this is the one list).
@@ -138,9 +140,11 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   for past days. Marking a day before a habit's `created` moves `created` back. The note for that day is
   updated too (only if it exists). The connector's `grove_mark_done(item, day, done)` does the same
   through the inbox (`type` "habit"/"task", `item`, `done`).
-- **Reminders:** exact alarms, Done / Snooze N min / "Snooze…" picker (5 min–2 h); repeats until done.
+- **Reminders:** exact alarms, Done / Snooze N min / "Snooze…" picker (5 min–2 h); an item with `nag: true`
+  repeats every `nagMinutes` until done (only three items do now, see below).
 - **Fewer notifications (Oct 19):** Reese's grove.json now has one reminder per item at its due time and
   `nag: false`, except t6 trash, t14 Zepbound, t15 Taltz (`nagMinutes: 90`). Don't turn nagging back on.
+  (t15 here is the Taltz task created after the old t15–t26 were deleted; see "Ids never reused".)
   - **Evening check-in** (`Settings.eveningCheckIn`, `checkInTime` 21:00): one notification listing what's
     still open in Grove's day (`Logic.checkInItems`: habits except Morning practice, tasks, Before-bed last
     as "(when you go to bed)"). Nothing if all done. Tap opens Today; a Done button only with exactly one item.
@@ -167,12 +171,19 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - **Vault sync:** Grove writes its setup to `Grove/grove.json` and check-ins to `Grove/history.json`
   in the vault (Syncthing carries them to the server). Edits to `grove.json` are applied when the
   app opens. On a fresh install, picking the vault restores from these files. The connector logs
-  pages/sessions by dropping files in `Grove/inbox/`; the app applies them, records their ids in
-  `appliedInbox` (history.json) and deletes them.
+  pages, writing sessions and check-offs on any day by dropping files in `Grove/inbox/` (`type`
+  "pages" / "session" / "habit" / "task"); the app applies them in name order (names start with the
+  time), records their ids in `appliedInbox` (history.json) and deletes them.
+  **Only one device may be linked to the vault.** Two copies of Grove would overwrite each other's
+  history and notes (checked Oct 21, 2026; Reese uses Obsidian directly on the tablet instead).
 - **Connector (`connector/`):** an MCP server that runs on the server and reads/edits those files.
-  Tools: `grove_overview`, `grove_history`, `grove_setup`, add/update/remove habit and task, holy
-  days, settings, `grove_log_pages`, `grove_log_session`, `grove_add_book`, `grove_update_book`.
-  The connector writes book-note progress itself (same rules as the app) when pages are logged or a book is edited. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
+  Tools (25): `grove_overview`, `grove_history`, `grove_setup`; `grove_add/update/remove_habit`;
+  `grove_add/update/remove_task` (weekly, monthly, one-time or `any_day`); `grove_mark_done` (any earlier
+  day); `grove_log_pages`, `grove_log_session`, `grove_add_book`, `grove_update_book`;
+  `grove_add/update/remove_todo`; `grove_prompt_thought/done/title`; `grove_log_exploration`,
+  `grove_exploration_log`; `grove_set_holy_day`, `grove_remove_holy_day`; `grove_update_settings`.
+  The connector writes book-note progress, prompt notes/tracker and plant-study lines itself (same rules
+  as the app); everything else goes through grove.json or the inbox. Connect over SSH (see `connector/README.md`, "Quick start for Reese's setup"):
   ```powershell
   claude mcp add --scope user grove -- ssh reese@10.0.0.118 /home/reese/grove-src/connector/.venv/bin/python /home/reese/grove-src/connector/grove_mcp.py --vault /mnt/bigdrive/Obsidian
   ```
@@ -182,12 +193,12 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 
 | Path | What |
 |---|---|
-| `app/src/main/java/com/grove/app/data/` | `Models.kt` (data), `Logic.kt` (streaks, day rollover, schedules; pure, unit-tested), `Seed.kt` (first-run habits/tasks/holy days from the TickTick setup), `Store.kt` (JSON file + StateFlow), `Effects.kt` (what runs after every change) |
-| `notify/` | `AlarmScheduler`, `ReminderReceiver` (alarms, buttons, boot), `Notifier` (channels, pinned + reminder notifications), `SnoozeActivity` |
-| `widget/Widgets.kt` | Glance widgets and their actions |
-| `obsidian/` | `NoteText` (pure note edits, tested), `ObsidianSync` (daily note via SAF), `VaultSync` (grove.json / history.json / inbox), `BookNotes` (book notes in `Books/`) |
-| `data/Migrate.kt` | One-way data upgrades run on every load/change (habits h4/h5 → goals, books, `nextId`) |
-| `ui/` | Compose screens: Today, Day, Habit, Edit, Settings, Forest, Goals/Books (`GoalsScreen.kt`) |
+| `app/src/main/java/com/grove/app/data/` | `Models.kt` (data), `Logic.kt` (streaks, day rollover, schedules, goals, books, check-in, quiet hours; pure, unit-tested), `Todos.kt`, `Prompts.kt`, `Explore.kt` (to-dos, My Deepest Me, plant study; pure, tested), `Seed.kt` (first-run habits/tasks/holy days from the TickTick setup), `Store.kt` (JSON file + StateFlow), `Effects.kt` (what runs after every change and on app open) |
+| `data/Migrate.kt` | One-way data upgrades run on every load/change (h4/h5 → goals, books, `nextId`, prompt goal + t12 removed, plant study, t3 any-day, prompt roll-over, pruning) |
+| `notify/` | `AlarmScheduler`, `ReminderReceiver` (alarms, buttons, boot, check-in, nudges), `Notifier` (channels, pinned, reminder, nudge and check-in notifications), `SnoozeActivity` |
+| `widget/Widgets.kt` | Glance widgets (calendar + today, Wheel of the Year, tasks/to-dos list) and their actions |
+| `obsidian/` | `NoteText` (pure note edits, tested), `ObsidianSync` (daily notes via SAF), `VaultSync` (grove.json / history.json / inbox), `BookNotes`, `TodoNote`, `PromptNotes`, `ExploreNote` (the other notes Grove keeps in step) |
+| `ui/` | Compose screens: Today, Day, Habit, Edit (habit/task), Settings, Forest, `GoalsScreen.kt` (goal cards, Books), `TodoScreens.kt`, `ExploreScreens.kt` (Plant Study), `LinePrompt.kt` ("Add a line?" and text boxes), `AddTodoActivity.kt` (share target) |
 | `art/`, `tools/svg2vector.py` | Source SVGs and the converter to `res/drawable` (wolf split by hand into `wolf_tail/body/head.xml`) |
 | `connector/` | `grove_core.py` (rules mirrored from `Logic.kt`), `grove_mcp.py`, tests, README |
 | `.github/workflows/android.yml` | Unit tests, build, publish |
@@ -208,12 +219,17 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 
 ## Rules that matter
 
-- Habit/task `id`s are the keys for streak history: never change or reuse them.
-- Weekday arrays are Sunday-first. Times are `HH:mm` 24-hour; dates `yyyy-MM-dd`. Tasks repeat weekly (`days`), monthly (`monthDay` 1–31) or once (`date`).
+- Habit/task `id`s are the keys for streak history: never change or reuse them. New ids come from `nextId`
+  with a letter prefix: h habit, t task, g goal, b book, d to-do, p plant, e plant-study session.
+- Weekday arrays are Sunday-first. Times are `HH:mm` 24-hour; dates `yyyy-MM-dd`. Tasks repeat weekly (`days`),
+  once a week on any day (`anyDay`, `days` = reminder days), monthly (`monthDay` 1–31) or once (`date`).
 - "Today" in the app is Grove's day (`Logic.groveToday(data)`, which lags the calendar after midnight), never `LocalDate.now()`.
 - Habits with `role` `"morning"` / `"bedtime"` drive the day rollover and forest time of day.
 - Grove owns those 8 note properties; ticking them by hand in Obsidian gets reverted.
-- If streak, day, week or page-target rules change, change `Logic.kt` and `connector/grove_core.py` together.
+- Notes Grove writes into follow the same safety rules: never write a note that couldn't be read first,
+  ignore Syncthing conflict copies, don't recreate a note Reese deleted, and change only Grove's own parts.
+- If any rule mirrored by the connector changes (streaks, day, weeks, targets, to-dos, prompts, plant
+  study, any-day tasks, quiet hours), change the Kotlin file and `connector/grove_core.py` together, with tests.
 
 ## Known gaps / ideas not done yet
 
@@ -223,4 +239,5 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - One more leafy tree SVG (`tree-svgrepo-com (2).svg` in Reese's Drive "Grove art" folder) wasn't
   used, and the AI-generated PNG there was never opened.
 - SVG Repo licenses vary per icon; check before sharing the app beyond Reese.
-- `My Deepest Me` prompts are a single step; the 30 prompts themselves aren't in the app yet.
+- The 9 field guides and Fluent pieces cover only the original books; a new book's piece is guessed from its title.
+- The tablet can't share the vault with the phone (see Vault sync); multi-device support was offered and declined.
