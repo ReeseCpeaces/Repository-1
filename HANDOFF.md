@@ -122,6 +122,14 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
     adding (also in the share box); tap the badge or long-press a to-do to change it. The old `high` flag
     is no longer shown or used for sorting. Connector: `priority` on `grove_add_todo`/`grove_update_todo`;
     `grove_overview` lists to-dos as `P8 (orange) name`.
+  - **Priority tags in notes (Nov 2026):** every to-do line Grove writes ends with `#p1`…`#p10` (always written,
+    default `#p5`), placed right after the name and before any Tasks-plugin dates:
+    `- [ ] Drop off return #p9 📅 2027-01-17 ✅ 2026-11-04`. In the linked to-do note and in the daily note
+    (`- [ ] To-do: name #p9`). Matching ignores the tag (`Todos.splitTag`), so it never looks like a rename.
+    Changing the tag in the to-do note sets the priority (a line with no tag = 5), changing it in Grove rewrites
+    the tag; `Todo.notePriority` remembers the tag at the last sync so the side that changed wins (the note
+    if both). Existing lines got their tag on the first sync. The vault CSS that colors the tags lives on the
+    server side (not in this repo).
   - **In the daily note:** Grove's section of *today's* note lists open to-dos as `- [ ] To-do: …`; a finished one
     leaves the list (Nov 1, 2026: Reese's template no longer has a Dataview to-do list, so this is the one list).
     Ticking one there checks it off in Grove (`NoteText.tickedTodos`, read when the note syncs and when the app

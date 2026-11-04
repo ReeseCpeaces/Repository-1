@@ -173,6 +173,8 @@ data class Todo(
     val noteDone: Boolean = false,
     /** 1–10, 10 most important. Missing in older data = 5. Sorts the list (highest first) and colors it. */
     val priority: Int = 5,
+    /** The priority tag (#pN) on its line in the to-do note at the last sync; 0 = not synced yet. */
+    val notePriority: Int = 0,
 )
 
 @Serializable

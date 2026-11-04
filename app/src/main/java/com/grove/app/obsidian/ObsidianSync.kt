@@ -75,8 +75,9 @@ object ObsidianSync {
         }
         // Today's note lists the open to-dos (one leaves the list once it's checked off). An earlier
         // day's note keeps a record of the ones finished that day, if that's turned on.
-        if (day == data.currentDay) for (t in com.grove.app.data.Todos.open(data)) lines += "- [ ] To-do: ${t.name}"
-        else if (data.settings.todoDoneRecord) for (t in com.grove.app.data.Todos.doneOn(data, day)) lines += "- [x] To-do: ${t.name}"
+        val T = com.grove.app.data.Todos
+        if (day == data.currentDay) for (t in T.open(data)) lines += "- [ ] To-do: ${t.name} ${T.tag(T.priority(t))}"
+        else if (data.settings.todoDoneRecord) for (t in T.sorted(T.doneOn(data, day))) lines += "- [x] To-do: ${t.name} ${T.tag(T.priority(t))}"
         for (g in data.goals) {
             if (g.kind == com.grove.app.data.GoalKind.PROMPT) {
                 lines += "${g.name}: " + com.grove.app.data.Prompts.status(g.copy(title = ""), d).substringBefore(" · aim")

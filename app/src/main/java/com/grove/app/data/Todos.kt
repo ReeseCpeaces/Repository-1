@@ -71,9 +71,17 @@ object Todos {
     private val ITEM = Regex("""^(\s*[-*+] \[)([ xX])(\] )(.*)$""")
     private val DONE_MARK = Regex("""\s*✅\s*\d{4}-\d{2}-\d{2}""")
     private val DUE_MARK = Regex("""\s*📅\s*(\d{4}-\d{2}-\d{2})""")
+    /** The priority tag Grove writes on to-do lines: "#p1" … "#p10", before any Tasks-plugin dates. */
+    private val TAG = Regex("""\s*#p(10|[1-9])(?![\w/-])""")
+
+    fun tag(p: Int) = "#p${p.coerceIn(MIN_PRIORITY, MAX_PRIORITY)}"
+
+    /** A name with any priority tag taken off, and the tag's number (null = no tag). */
+    fun splitTag(s: String): Pair<String, Int?> =
+        s.replace(TAG, "").trim() to TAG.findAll(s).lastOrNull()?.groupValues?.get(1)?.toInt()
 
     /** A checklist line: its index, whether it's ticked, the name (without Tasks-plugin dates) and due date. */
-    data class NoteItem(val line: Int, val checked: Boolean, val name: String, val due: String)
+    data class NoteItem(val line: Int, val checked: Boolean, val name: String, val due: String, val priority: Int? = null)
 
     fun parse(text: String): List<NoteItem> {
         var fenced = false
@@ -82,8 +90,8 @@ object Todos {
             if (fenced) return@mapIndexedNotNull null
             val m = ITEM.matchEntire(line) ?: return@mapIndexedNotNull null
             val body = m.groupValues[4]
-            val name = body.replace(DONE_MARK, "").replace(DUE_MARK, "").trim()
-            if (name.isEmpty()) null else NoteItem(i, m.groupValues[2] != " ", name, DUE_MARK.find(body)?.groupValues?.get(1).orEmpty())
+            val (name, p) = splitTag(body.replace(DONE_MARK, "").replace(DUE_MARK, ""))
+            if (name.isEmpty()) null else NoteItem(i, m.groupValues[2] != " ", name, DUE_MARK.find(body)?.groupValues?.get(1).orEmpty(), p)
         }
     }
 
@@ -112,8 +120,17 @@ object Todos {
 
         fun rename(i: Int, name: String) {
             val m = ITEM.matchEntire(lines[i]) ?: return
+            val tags = TAG.findAll(m.groupValues[4]).joinToString("") { it.value }
             val marks = DUE_MARK.findAll(m.groupValues[4]).joinToString("") { it.value } + DONE_MARK.findAll(m.groupValues[4]).joinToString("") { it.value }
-            lines[i] = m.groupValues[1] + m.groupValues[2] + m.groupValues[3] + name + marks
+            lines[i] = m.groupValues[1] + m.groupValues[2] + m.groupValues[3] + name + tags + marks
+        }
+
+        // One "#pN" tag, just before the Tasks-plugin dates (or at the end). Nothing else on the line changes.
+        fun setTag(i: Int, p: Int) {
+            val m = ITEM.matchEntire(lines[i]) ?: return
+            val body = m.groupValues[4].replace(TAG, "")
+            val at = listOfNotNull(DUE_MARK.find(body)?.range?.first, DONE_MARK.find(body)?.range?.first).minOrNull() ?: body.trimEnd().length
+            lines[i] = m.groupValues[1] + m.groupValues[2] + m.groupValues[3] + body.substring(0, at).trimEnd() + " " + tag(p) + body.substring(at)
         }
 
         // Deleted in Grove: take them out of the note.
@@ -131,12 +148,13 @@ object Todos {
                 if (same != null) {
                     used += same.line
                     if (same.checked != t.done.isNotEmpty()) setChecked(same.line, t.done.isNotEmpty())
-                    todos += t.copy(inNote = true, noteName = t.name, noteDone = t.done.isNotEmpty())
+                    if (same.priority != priority(t)) setTag(same.line, priority(t))
+                    todos += t.copy(inNote = true, noteName = t.name, noteDone = t.done.isNotEmpty(), notePriority = priority(t))
                     continue
                 }
-                added += "- [${if (t.done.isEmpty()) " " else "x"}] ${t.name}" + (if (t.due.isNotEmpty()) " 📅 ${t.due}" else "") +
+                added += "- [${if (t.done.isEmpty()) " " else "x"}] ${t.name} ${tag(priority(t))}" + (if (t.due.isNotEmpty()) " 📅 ${t.due}" else "") +
                     (if (t.done.isNotEmpty()) " ✅ ${t.done}" else "")
-                todos += t.copy(inNote = true, noteName = t.name, noteDone = t.done.isNotEmpty())
+                todos += t.copy(inNote = true, noteName = t.name, noteDone = t.done.isNotEmpty(), notePriority = priority(t))
                 continue
             }
             val item = items.firstOrNull { it.line !in used && key(it.name) == key(t.noteName) }
@@ -153,8 +171,12 @@ object Todos {
                 groveDone != t.noteDone -> setChecked(item.line, groveDone)
             }
             if (t.name != t.noteName) rename(item.line, t.name)
+            // Priority: a changed tag in the note wins; otherwise Grove's priority is written (no tag = 5).
+            val noteP = item.priority ?: DEFAULT_PRIORITY
+            val p = if (t.notePriority != 0 && noteP != t.notePriority) noteP else priority(t)
+            if (item.priority != p) setTag(item.line, p)
             val due = if (item.due.isNotEmpty()) item.due else t.due
-            todos += t.copy(done = done, due = due, noteName = t.name, noteDone = done.isNotEmpty())
+            todos += t.copy(done = done, due = due, noteName = t.name, noteDone = done.isNotEmpty(), priority = p, notePriority = p)
         }
 
         // New, unticked items in the note join Grove.
@@ -162,7 +184,10 @@ object Todos {
         for (item in items) {
             if (item.line in used || item.checked) continue
             val (id, next) = Logic.allocateId(d, "d")
-            d = next.copy(todos = next.todos + Todo(id, item.name, due = item.due, created = today, inNote = true, noteName = item.name))
+            val p = item.priority ?: DEFAULT_PRIORITY
+            if (item.priority == null) setTag(item.line, p)
+            d = next.copy(todos = next.todos + Todo(id, item.name, due = item.due, created = today, inNote = true, noteName = item.name,
+                priority = p, notePriority = p))
         }
 
         // Write: drop removed lines, then add new items after the last checklist line (or at the end).

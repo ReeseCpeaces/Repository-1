@@ -104,6 +104,7 @@ object NoteText {
         if (s < 0 || e < s) return emptyList()
         return text.substring(s, e).replace("\r\n", "\n").split("\n")
             .mapNotNull { Regex("""^\s*- \[[xX]\] To-do: (.+?)\s*$""").matchEntire(it)?.groupValues?.get(1) }
+            .map { com.grove.app.data.Todos.splitTag(it).first }
     }
 
     /** Simple `key: value` pairs from the frontmatter (quotes stripped). Nested values are skipped. */

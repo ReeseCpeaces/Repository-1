@@ -339,14 +339,14 @@ class LogicTest {
         // Note items join Grove (not the ticked old one); Grove's item joins the note after the last checklist line.
         assertEquals(listOf("Call the vet", "Fix the gate", "Buy seeds"), d1.todos.map { it.name })
         assertEquals("2026-11-01", d1.todos.first { it.name == "Buy seeds" }.due)
-        assertEquals("# To-do\n- [ ] Fix the gate\n- [x] Old thing ✅ 2026-10-01\n- [ ] Buy seeds 📅 2026-11-01\n- [ ] Call the vet\n\nNotes below\n", text)
+        assertEquals("# To-do\n- [ ] Fix the gate #p5\n- [x] Old thing ✅ 2026-10-01\n- [ ] Buy seeds #p5 📅 2026-11-01\n- [ ] Call the vet #p5\n\nNotes below\n", text)
         assertEquals(d1 to text, com.grove.app.data.Todos.syncNote(d1, text).let { (a, b) -> a to b }) // stable
         // Checked off in Grove -> ticked in the note.
         d = com.grove.app.data.Todos.toggle(d1, d1.todos.first { it.name == "Fix the gate" }.id)
         val (d2, text2) = com.grove.app.data.Todos.syncNote(d, text)
-        assertTrue(text2, text2.contains("- [x] Fix the gate ✅ 2026-10-19\n"))
+        assertTrue(text2, text2.contains("- [x] Fix the gate #p5 ✅ 2026-10-19\n"))
         // Ticked in Obsidian -> done in Grove; removed in Obsidian -> gone from Grove.
-        val edited = text2.replace("- [ ] Buy seeds", "- [x] Buy seeds").replace("- [ ] Call the vet\n", "")
+        val edited = text2.replace("- [ ] Buy seeds", "- [x] Buy seeds").replace("- [ ] Call the vet #p5\n", "")
         val (d3, _) = com.grove.app.data.Todos.syncNote(d2, edited)
         assertEquals("2026-10-19", d3.todos.first { it.name == "Buy seeds" }.done)
         assertTrue(d3.todos.none { it.name == "Call the vet" })
@@ -354,7 +354,7 @@ class LogicTest {
         val seeds = d3.todos.first { it.name == "Buy seeds" }
         val reopened = com.grove.app.data.Todos.toggle(d3, seeds.id)
         val (d4, text4) = com.grove.app.data.Todos.syncNote(reopened, edited)
-        assertTrue(text4, text4.contains("- [ ] Buy seeds 📅 2026-11-01\n"))
+        assertTrue(text4, text4.contains("- [ ] Buy seeds #p5 📅 2026-11-01\n"))
         val (d5, text5) = com.grove.app.data.Todos.syncNote(com.grove.app.data.Todos.delete(d4, seeds.id), text4)
         assertTrue(text5, !text5.contains("Buy seeds"))
         assertTrue(d5.todos.none { it.name == "Buy seeds" })
@@ -518,5 +518,29 @@ class LogicTest {
         // Older saved data without the field reads as 5.
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
         assertEquals(5, json.decodeFromString(com.grove.app.data.Todo.serializer(), """{"id":"d1","name":"x"}""").priority)
+    }
+
+    @Test fun priorityTagsInTheToDoNoteGoBothWays() {
+        val T = com.grove.app.data.Todos
+        var d = T.add(migrated(), "Drop off return", priority = 9, due = "2027-01-17")
+        // Existing lines get a tag; matching ignores it; Grove's to-do is written with its tag before the dates.
+        val note = "- [ ] Mow #p8\n- [ ] Rake leaves\n"
+        val (d1, t1) = T.syncNote(d, note)
+        assertEquals("- [ ] Mow #p8\n- [ ] Rake leaves #p5\n- [ ] Drop off return #p9 📅 2027-01-17\n", t1)
+        assertEquals(8, d1.todos.first { it.name == "Mow" }.priority)
+        assertEquals(d1 to t1, T.syncNote(d1, t1)) // stable, no duplicates
+        // Changed in the note -> Grove takes it (no tag = 5).
+        val (d2, t2) = T.syncNote(d1, t1.replace("Mow #p8", "Mow #p3").replace("Drop off return #p9", "Drop off return"))
+        assertEquals(3, d2.todos.first { it.name == "Mow" }.priority)
+        assertEquals(5, d2.todos.first { it.name == "Drop off return" }.priority)
+        assertTrue(t2, t2.contains("- [ ] Drop off return #p5 📅 2027-01-17")) // the tag is written back
+        // Changed in Grove -> the tag on that line is rewritten; ticking keeps the tag before the date marks.
+        val mow = d2.todos.first { it.name == "Mow" }.id
+        val (_, t3) = T.syncNote(T.toggle(T.setPriority(d2, mow, 10), mow), t2)
+        assertTrue(t3, t3.startsWith("- [x] Mow #p10 ✅ 2026-10-19\n"))
+        // Daily note lines carry the tag, and a tick there is read without it.
+        assertTrue(com.grove.app.obsidian.ObsidianSync.summary(d2).contains("- [ ] To-do: Rake leaves #p5"))
+        assertEquals(listOf("Rake leaves"), com.grove.app.obsidian.NoteText.tickedTodos(
+            "${com.grove.app.obsidian.NoteText.START}\n- [x] To-do: Rake leaves #p5\n${com.grove.app.obsidian.NoteText.END}"))
     }
 }
