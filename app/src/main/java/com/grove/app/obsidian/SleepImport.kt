@@ -56,7 +56,8 @@ object SleepImport {
         val data = Store.get(context)
         // Re-read from a day before the last imported wake-up, so a night split in two (or a nap the
         // same day) is worked out again from all its pieces. First time: the last week.
-        val last = data.lastSleepImportEnd.takeIf { it.isNotEmpty() }?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        // Data from before every sleep was kept (sleepFormat < 2) is read again from the last week once.
+        val last = data.lastSleepImportEnd.takeIf { it.isNotEmpty() && data.sleepFormat >= 2 }?.let { runCatching { Instant.parse(it) }.getOrNull() }
         val from = last?.atZone(zone)?.toLocalDate()?.minusDays(1)?.atStartOfDay(zone)?.toInstant()
             ?: Instant.now().minus(7, ChronoUnit.DAYS)
         val records = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.after(from))).records
@@ -73,7 +74,7 @@ object SleepImport {
         val newest = records.maxOf { it.endTime }
         Store.update(context) { d ->
             val keep = (d.sleepNights.filter { it.day !in days.keys } + days.values.flatten()).sortedBy { it.start }.takeLast(400)
-            d.copy(sleepNights = keep, lastSleepImportEnd = maxOf(newest, last ?: newest).toString())
+            d.copy(sleepNights = keep, lastSleepImportEnd = maxOf(newest, last ?: newest).toString(), sleepFormat = 2)
         }
         if (changed.isNotEmpty()) write(context, Store.get(context), changed)
         return changed.values.sumOf { it.size }

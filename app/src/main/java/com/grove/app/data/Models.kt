@@ -270,6 +270,8 @@ data class AppData(
     /** Imported sleeps (last 60), and the end of the latest one read from Health Connect (ISO instant). */
     val sleepNights: List<SleepNight> = emptyList(),
     val lastSleepImportEnd: String = "",
+    /** 2 = every sleep kept on its own (before that, 0.1.32 kept only the longest per day). */
+    val sleepFormat: Int = 0,
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }
