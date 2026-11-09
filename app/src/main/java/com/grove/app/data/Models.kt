@@ -208,6 +208,9 @@ data class Settings(
     val plantStudyNotePath: String = "Druidry/Druid Exploration - Plant Study.md",
     /** Past days' notes keep "- [x] To-do: …" for to-dos finished that day (today's note lists only open ones). */
     val todoDoneRecord: Boolean = true,
+    /** Read sleep from Health Connect (Galaxy Watch) into the daily note and Health/Sleep log.md. */
+    val sleepImport: Boolean = false,
+    val sleepLogPath: String = "Health/Sleep log.md",
 )
 
 /** What got done on one logical day. */
@@ -264,6 +267,9 @@ data class AppData(
     val migratedExplore: Boolean = false,
     /** Nature time (t3) became a once-a-week, any-day task. */
     val migratedNatureWeek: Boolean = false,
+    /** Imported sleeps (last 60), and the end of the latest one read from Health Connect (ISO instant). */
+    val sleepNights: List<SleepNight> = emptyList(),
+    val lastSleepImportEnd: String = "",
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

@@ -131,7 +131,7 @@ object ObsidianSync {
     fun find(root: DocumentFile, rel: String): DocumentFile? =
         rel.split('/').filter { it.isNotEmpty() }.fold(root as DocumentFile?) { dir, part -> dir?.findFile(part) }
 
-    private fun findOrCreate(context: Context, root: DocumentFile, rel: String, data: AppData, d: java.time.LocalDate): DocumentFile? {
+    fun findOrCreate(context: Context, root: DocumentFile, rel: String, data: AppData, d: java.time.LocalDate): DocumentFile? {
         find(root, rel)?.let { return it }
         val parts = rel.split('/').filter { it.isNotEmpty() }
         var dir = root

@@ -55,7 +55,13 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
             item {
                 Row(Modifier.fillMaxWidth().padding(16.dp, 12.dp, 8.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) {
-                        Title("Today", "${Logic.weekdayName(day)}, ${day.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${day.dayOfMonth}")
+                        Column {
+                            Title("Today", "${Logic.weekdayName(day)}, ${day.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${day.dayOfMonth}")
+                            // A quiet line, no notification.
+                            com.grove.app.data.Sleep.latest(data)?.let { n ->
+                                Text("Slept ${com.grove.app.data.Sleep.hours(n)} h · ${n.start.takeLast(5)} → ${n.end.takeLast(5)}", fontSize = 12.sp, color = GroveColors.Muted)
+                            }
+                        }
                     }
                     IconButton(onClick = { go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }
                 }

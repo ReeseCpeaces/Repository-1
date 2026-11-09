@@ -42,6 +42,8 @@ object Effects {
         ObsidianSync.syncAsync(context, null, Store.get(context))
         // Pick up plant-study sessions added in the note by hand or by Claude.
         ExploreNote.syncAsync(context, null, Store.get(context))
+        // Last night's sleep from Health Connect, if that's turned on (no notifications).
+        runCatching { com.grove.app.obsidian.SleepImport.importIfOn(context) }
         Store.refreshDay(context)
         val data = Store.get(context)
         Notifier.showPinned(context, data)

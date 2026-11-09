@@ -65,6 +65,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Read-only sleep from Health Connect (Galaxy Watch → Samsung Health).
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
 
     testImplementation("junit:junit:4.13.2")
 }

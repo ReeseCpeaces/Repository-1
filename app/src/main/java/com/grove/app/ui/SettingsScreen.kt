@@ -105,6 +105,9 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
                 label = { Text("Book notes folder") }, supportingText = { Text("Notes here with subType: Druid book appear on the Books screen and get your progress.") },
                 modifier = Modifier.fillMaxWidth())
 
+            SectionLabel("Sleep (Galaxy Watch)", GroveColors.Green)
+            SleepSettings(data) { f -> saveSettings(f) }
+
             SectionLabel("Your day", GroveColors.Green)
             Text("A new day starts when you check off Morning practice, or at this hour if you haven't:", fontSize = 13.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -165,6 +168,49 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
             Text("Grove $version", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GroveColors.Muted)
             Text("Art from SVG Repo (svgrepo.com).", fontSize = 12.sp, color = GroveColors.Muted)
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/** Connect Health Connect (read-only sleep), show whether it's on, and import now. */
+@Composable
+private fun SleepSettings(data: AppData, save: ((com.grove.app.data.Settings) -> com.grove.app.data.Settings) -> Unit) {
+    val context = LocalContext.current
+    val SI = com.grove.app.obsidian.SleepImport
+    var available by remember { mutableStateOf<Boolean?>(null) }
+    var granted by remember { mutableStateOf(false) }
+    var check by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(check) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            available = SI.available(context)
+            granted = SI.granted(context)
+        }
+    }
+    val ask = rememberLauncherForActivityResult(androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()) { got ->
+        if (got.containsAll(SI.PERMISSIONS)) {
+            save { it.copy(sleepImport = true) }
+            Thread { SI.importIfOn(context.applicationContext, force = true) }.start()
+        }
+        check++
+    }
+    val last = com.grove.app.data.Sleep.latest(data) ?: data.sleepNights.lastOrNull()
+    Text(
+        when {
+            available == false -> "Health Connect isn't available on this phone."
+            data.settings.sleepImport && granted -> "On. Each wake-up day's sleep goes into that day's note and ${data.settings.sleepLogPath}." +
+                (last?.let { " Last: ${it.day}, ${com.grove.app.data.Sleep.hours(it)} h." } ?: "")
+            else -> "Grove can read your sleep (read-only) from Health Connect. First, in Samsung Health: Settings › Health Connect › allow Sleep."
+        },
+        fontSize = 13.sp, color = GroveColors.Muted,
+    )
+    if (available == true) {
+        if (!granted || !data.settings.sleepImport) {
+            OutlinedButton(onClick = { ask.launch(SI.PERMISSIONS + SI.BACKGROUND) }, modifier = Modifier.fillMaxWidth()) { Text("Connect sleep from Health Connect") }
+        } else {
+            OutlinedButton(onClick = { Thread { SI.importIfOn(context.applicationContext, force = true) }.start() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Import sleep now")
+            }
+            OutlinedButton(onClick = { save { it.copy(sleepImport = false) } }, modifier = Modifier.fillMaxWidth()) { Text("Turn off sleep import") }
         }
     }
 }

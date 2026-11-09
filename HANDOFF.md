@@ -98,6 +98,23 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
     Nothing else in the note is touched; it's never created; unreadable = never written.
   - Connector: `grove_log_exploration` writes the note line itself; `grove_exploration_log` lists sessions
     (from the note, else history.json); `grove_overview` shows the goal and minutes per plant.
+- **Sleep from the Galaxy Watch (Nov 2026)** (`data/Sleep.kt` pure + tested, `obsidian/SleepImport.kt`): Galaxy Watch3 →
+  Samsung Health → Health Connect → Grove (read-only `SleepSessionRecord` with stages; library
+  `androidx.health.connect:connect-client`). Reese's one-time setup: Samsung Health › Settings › Health Connect › allow
+  Sleep, then Grove › Settings › "Connect sleep from Health Connect" (`Settings.sleepImport`). Runs on app open and in
+  the day ticks (`Effects.refreshAll`, at most every 20 min); background reads need Health Connect's
+  READ_HEALTH_DATA_IN_BACKGROUND, which Grove asks for (older Health Connect only reads while the app is open).
+  - One **main sleep per wake-up day** (calendar day of the end time, since a night can end any hour): pieces under
+    60 min apart are joined, the longest per day is kept, anything under 60 min (naps) is left out.
+    Asleep = time in bed minus awake/out-of-bed stages. No sleep score (Health Connect doesn't expose Samsung's).
+  - Written to that day's note frontmatter: `sleep_start`, `sleep_end` (`yyyy-MM-ddTHH:mm`, local), `sleep_hours`
+    (one decimal), `sleep_deep_min`, `sleep_rem_min`, `sleep_light_min`, `sleep_awake_min` (plain numbers).
+    And one line per day in `Health/Sleep log.md` (`Settings.sleepLogPath`, created if missing), in date order:
+    `- 2026-11-08 — 01:42 → 09:15 · 7.0 h asleep · deep 62 · REM 95 · light 240 · awake 31`.
+  - No duplicates: `AppData.lastSleepImportEnd` (ISO instant) and `sleepNights` (last 60). Each import re-reads from a
+    day before the last wake-up and rewrites changed nights in place (same day = same line / same keys).
+  - **No notifications.** Only a quiet "Slept 7.0 h · 01:42 → 09:15" line under Today's title.
+  - The connector doesn't read sleep yet; the server chat plans an assistant tool, a Dataview chart and a wall card.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
