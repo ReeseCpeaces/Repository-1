@@ -549,15 +549,15 @@ class LogicTest {
     @Test fun sleepBecomesOneMainSleepPerWakeUpDay() {
         val S = com.grove.app.data.Sleep
         fun t(s: String) = LocalDateTime.parse(s)
-        val night = S.Session(t("2026-11-08T01:42"), t("2026-11-08T09:15"), listOf(
-            S.Stage(S.LIGHT, t("2026-11-08T01:42"), t("2026-11-08T05:42")),   // 240
-            S.Stage(S.DEEP, t("2026-11-08T05:42"), t("2026-11-08T06:44")),    // 62
-            S.Stage(S.REM, t("2026-11-08T06:44"), t("2026-11-08T08:19")),     // 95
-            S.Stage(S.AWAKE, t("2026-11-08T08:19"), t("2026-11-08T08:50")),   // 31
+        val night = com.grove.app.data.Sleep.Session(t("2026-11-08T01:42"), t("2026-11-08T09:15"), listOf(
+            com.grove.app.data.Sleep.Stage(S.LIGHT, t("2026-11-08T01:42"), t("2026-11-08T05:42")),   // 240
+            com.grove.app.data.Sleep.Stage(S.DEEP, t("2026-11-08T05:42"), t("2026-11-08T06:44")),    // 62
+            com.grove.app.data.Sleep.Stage(S.REM, t("2026-11-08T06:44"), t("2026-11-08T08:19")),     // 95
+            com.grove.app.data.Sleep.Stage(S.AWAKE, t("2026-11-08T08:19"), t("2026-11-08T08:50")),   // 31
         ))
-        val nap = S.Session(t("2026-11-08T15:00"), t("2026-11-08T15:40"))      // too short to count
-        val split1 = S.Session(t("2026-11-09T22:00").minusDays(1), t("2026-11-09T02:00"))
-        val split2 = S.Session(t("2026-11-09T02:30"), t("2026-11-09T14:10"))   // woke mid-afternoon; joined with the first piece
+        val nap = com.grove.app.data.Sleep.Session(t("2026-11-08T15:00"), t("2026-11-08T15:40"))      // too short to count
+        val split1 = com.grove.app.data.Sleep.Session(t("2026-11-09T22:00").minusDays(1), t("2026-11-09T02:00"))
+        val split2 = com.grove.app.data.Sleep.Session(t("2026-11-09T02:30"), t("2026-11-09T14:10"))   // woke mid-afternoon; joined with the first piece
         val nights = S.nights(listOf(nap, split2, night, split1))
         assertEquals(listOf("2026-11-08", "2026-11-09"), nights.map { it.day })
         val n = nights[0]
