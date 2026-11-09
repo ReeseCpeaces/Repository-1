@@ -193,12 +193,12 @@ private fun SleepSettings(data: AppData, save: ((com.grove.app.data.Settings) ->
         }
         check++
     }
-    val last = com.grove.app.data.Sleep.latest(data) ?: data.sleepNights.lastOrNull()
+    val last = data.sleepNights.lastOrNull()
     Text(
         when {
             available == false -> "Health Connect isn't available on this phone."
             data.settings.sleepImport && granted -> "On. Each wake-up day's sleep goes into that day's note and ${data.settings.sleepLogPath}." +
-                (last?.let { " Last: ${it.day}, ${com.grove.app.data.Sleep.hours(it)} h." } ?: "")
+                (last?.let { " Last sleep: ${it.day}, ${com.grove.app.data.Sleep.hours(it)} h." } ?: "")
             else -> "Grove can read your sleep (read-only) from Health Connect. First, in Samsung Health: Settings › Health Connect › allow Sleep."
         },
         fontSize = 13.sp, color = GroveColors.Muted,

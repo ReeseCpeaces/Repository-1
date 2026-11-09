@@ -58,8 +58,8 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                         Column {
                             Title("Today", "${Logic.weekdayName(day)}, ${day.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${day.dayOfMonth}")
                             // A quiet line, no notification.
-                            com.grove.app.data.Sleep.latest(data)?.let { n ->
-                                Text("Slept ${com.grove.app.data.Sleep.hours(n)} h · ${n.start.takeLast(5)} → ${n.end.takeLast(5)}", fontSize = 12.sp, color = GroveColors.Muted)
+                            com.grove.app.data.Sleep.summary(com.grove.app.data.Sleep.latestDay(data))?.let { line ->
+                                Text(line, fontSize = 12.sp, color = GroveColors.Muted)
                             }
                         }
                     }

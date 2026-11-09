@@ -546,37 +546,43 @@ class LogicTest {
 
     // ----- sleep from Health Connect -----
 
-    @Test fun sleepBecomesOneMainSleepPerWakeUpDay() {
+    @Test fun everySleepIsKeptOnItsOwnNapsIncluded() {
         val S = com.grove.app.data.Sleep
-        fun t(s: String) = LocalDateTime.parse(s)
+        fun t(x: String) = LocalDateTime.parse(x)
         val night = com.grove.app.data.Sleep.Session(t("2026-11-08T01:42"), t("2026-11-08T09:15"), listOf(
             com.grove.app.data.Sleep.Stage(S.LIGHT, t("2026-11-08T01:42"), t("2026-11-08T05:42")),   // 240
             com.grove.app.data.Sleep.Stage(S.DEEP, t("2026-11-08T05:42"), t("2026-11-08T06:44")),    // 62
             com.grove.app.data.Sleep.Stage(S.REM, t("2026-11-08T06:44"), t("2026-11-08T08:19")),     // 95
             com.grove.app.data.Sleep.Stage(S.AWAKE, t("2026-11-08T08:19"), t("2026-11-08T08:50")),   // 31
         ))
-        val nap = com.grove.app.data.Sleep.Session(t("2026-11-08T15:00"), t("2026-11-08T15:40"))      // too short to count
-        val split1 = com.grove.app.data.Sleep.Session(t("2026-11-09T22:00").minusDays(1), t("2026-11-09T02:00"))
-        val split2 = com.grove.app.data.Sleep.Session(t("2026-11-09T02:30"), t("2026-11-09T14:10"))   // woke mid-afternoon; joined with the first piece
-        val nights = S.nights(listOf(nap, split2, night, split1))
-        assertEquals(listOf("2026-11-08", "2026-11-09"), nights.map { it.day })
-        val n = nights[0]
-        assertEquals(422, n.asleepMin) // 453 minutes in bed minus 31 awake
-        assertEquals("7.0", S.hours(n))
-        assertEquals(mapOf("sleep_start" to "2026-11-08T01:42", "sleep_end" to "2026-11-08T09:15", "sleep_hours" to "7.0", "sleep_deep_min" to "62",
-            "sleep_rem_min" to "95", "sleep_light_min" to "240", "sleep_awake_min" to "31"), S.frontmatter(n))
-        assertEquals("2026-11-08T22:00", nights[1].start)
-        assertEquals("- 2026-11-08 — 01:42 → 09:15 · 7.0 h asleep · deep 62 · REM 95 · light 240 · awake 31", S.logLine(n))
-        // The log: new file gets a heading; the same night again replaces its line; an earlier day goes in date order.
-        val log1 = S.applyLog("", listOf(n))
-        assertTrue(log1, log1.startsWith("# Sleep log\n") && log1.endsWith(S.logLine(n) + "\n"))
-        val log2 = S.applyLog(log1, listOf(n.copy(asleepMin = 400), nights[1]))
-        assertEquals(1, log2.lines().count { it.startsWith("- 2026-11-08 — ") })
-        assertTrue(log2, log2.contains("6.7 h asleep") && log2.indexOf("2026-11-08 —") < log2.indexOf("2026-11-09 —"))
-        val log3 = S.applyLog(log2, listOf(n.copy(day = "2026-11-07")))
-        assertTrue(log3.indexOf("2026-11-07 —") < log3.indexOf("2026-11-08 —"))
-        // Daily note frontmatter: added without touching anything else.
-        val note = com.grove.app.obsidian.NoteText.setFrontmatter("---\nread: false\n---\n## Daily Log\n", S.frontmatter(n))
-        assertTrue(note, note.startsWith("---\nread: false\nsleep_start: 2026-11-08T01:42\n") && note.endsWith("---\n## Daily Log\n"))
+        val nap1 = com.grove.app.data.Sleep.Session(t("2026-11-08T13:00"), t("2026-11-08T13:20"))   // 20 min still counts
+        val nap2 = com.grove.app.data.Sleep.Session(t("2026-11-08T23:30"), t("2026-11-09T00:10"))   // crosses midnight: the 9th
+        val sleeps = S.sleeps(listOf(nap2, nap1, night))
+        assertEquals(listOf("2026-11-08", "2026-11-08", "2026-11-09"), sleeps.map { it.day })
+        assertEquals(listOf(422, 20, 40), sleeps.map { it.asleepMin }) // in bed minus awake stages
+        val days = S.byDay(sleeps)
+        // The daily note: totals for the day, how many sleeps, and the longest one's times.
+        assertEquals(mapOf(
+            "sleep_hours" to "7.4", "sleep_count" to "2", "sleep_main_hours" to "7.0", "sleep_nap_min" to "20",
+            "sleep_start" to "2026-11-08T01:42", "sleep_end" to "2026-11-08T09:15",
+            "sleep_deep_min" to "62", "sleep_rem_min" to "95", "sleep_light_min" to "240", "sleep_awake_min" to "31",
+        ), S.frontmatter(days.getValue("2026-11-08")))
+        assertEquals("Slept 7.4 h · 2 sleeps (longest 7.0 h)", S.summary(days.getValue("2026-11-08")))
+        assertEquals("Slept 0.7 h · 23:30 → 00:10", S.summary(days.getValue("2026-11-09")))
+        // The log: one line per sleep; re-importing a day replaces its lines, never duplicates; date and time order.
+        val log1 = S.applyLog("", days)
+        assertTrue(log1, log1.startsWith("# Sleep log\n"))
+        assertEquals(listOf(
+            "- 2026-11-08 — 01:42 → 09:15 · 7.0 h asleep · deep 62 · REM 95 · light 240 · awake 31",
+            "- 2026-11-08 — 13:00 → 13:20 · 0.3 h asleep · deep 0 · REM 0 · light 0 · awake 0",
+            "- 2026-11-09 — 23:30 → 00:10 · 0.7 h asleep · deep 0 · REM 0 · light 0 · awake 0",
+        ), log1.lines().filter { it.startsWith("- ") })
+        val again = S.applyLog(log1, mapOf("2026-11-08" to days.getValue("2026-11-08").take(1)))
+        assertEquals(2, again.lines().count { it.startsWith("- ") })
+        val earlier = S.applyLog(again, mapOf("2026-11-07" to listOf(sleeps[1].copy(day = "2026-11-07"))))
+        assertTrue(earlier.indexOf("2026-11-07 —") < earlier.indexOf("2026-11-08 —"))
+        // Frontmatter is added without touching anything else in the note.
+        val note = com.grove.app.obsidian.NoteText.setFrontmatter("---\nread: false\n---\n## Daily Log\n", S.frontmatter(days.getValue("2026-11-09")))
+        assertTrue(note, note.startsWith("---\nread: false\nsleep_hours: 0.7\nsleep_count: 1\n") && note.endsWith("---\n## Daily Log\n"))
     }
 }

@@ -104,16 +104,21 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   Sleep, then Grove › Settings › "Connect sleep from Health Connect" (`Settings.sleepImport`). Runs on app open and in
   the day ticks (`Effects.refreshAll`, at most every 20 min); background reads need Health Connect's
   READ_HEALTH_DATA_IN_BACKGROUND, which Grove asks for (older Health Connect only reads while the app is open).
-  - One **main sleep per wake-up day** (calendar day of the end time, since a night can end any hour): pieces under
-    60 min apart are joined, the longest per day is kept, anything under 60 min (naps) is left out.
-    Asleep = time in bed minus awake/out-of-bed stages. No sleep score (Health Connect doesn't expose Samsung's).
-  - Written to that day's note frontmatter: `sleep_start`, `sleep_end` (`yyyy-MM-ddTHH:mm`, local), `sleep_hours`
-    (one decimal), `sleep_deep_min`, `sleep_rem_min`, `sleep_light_min`, `sleep_awake_min` (plain numbers).
-    And one line per day in `Health/Sleep log.md` (`Settings.sleepLogPath`, created if missing), in date order:
-    `- 2026-11-08 — 01:42 → 09:15 · 7.0 h asleep · deep 62 · REM 95 · light 240 · awake 31`.
-  - No duplicates: `AppData.lastSleepImportEnd` (ISO instant) and `sleepNights` (last 60). Each import re-reads from a
-    day before the last wake-up and rewrites changed nights in place (same day = same line / same keys).
-  - **No notifications.** Only a quiet "Slept 7.0 h · 01:42 → 09:15" line under Today's title.
+  - **Every sleep is kept on its own** (Nov 9, 2026: Reese sleeps in short naps through the day, and those matter): no
+    minimum length, no merging, no "main sleep only". Each one is filed under the calendar day it ended (a night can end
+    any hour; a nap crossing midnight belongs to the next day). Asleep = time in bed minus awake/out-of-bed stages.
+    No sleep score (Health Connect doesn't expose Samsung's).
+  - The day's note frontmatter holds **day totals** over all sleeps that ended that day: `sleep_hours` (total asleep,
+    one decimal), `sleep_count`, `sleep_main_hours` (the longest sleep), `sleep_nap_min` (everything but the longest),
+    `sleep_start`/`sleep_end` (the longest sleep, `yyyy-MM-ddTHH:mm` local), `sleep_deep_min`, `sleep_rem_min`,
+    `sleep_light_min`, `sleep_awake_min` (totals). Plain numbers.
+  - `Health/Sleep log.md` (`Settings.sleepLogPath`, created if missing) has **one line per sleep**, in date and time
+    order: `- 2026-11-08 — 13:00 → 13:20 · 0.3 h asleep · deep 0 · REM 0 · light 0 · awake 0`. A re-import replaces
+    all of that day's lines with the new set, so nothing is duplicated.
+  - No duplicates: `AppData.lastSleepImportEnd` (ISO instant) and `sleepNights` (each sleep, last 400). Each import
+    re-reads from a day before the last wake-up and rewrites only days whose set of sleeps changed.
+  - **No notifications.** Only a quiet line under Today's title: "Slept 7.4 h · 2 sleeps (longest 7.0 h)", or
+    "Slept 7.0 h · 01:42 → 09:15" when there was one.
   - The connector doesn't read sleep yet; the server chat plans an assistant tool, a Dataview chart and a wall card.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.

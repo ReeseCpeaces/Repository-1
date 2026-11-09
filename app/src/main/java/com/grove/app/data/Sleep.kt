@@ -5,7 +5,10 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/** One night's (or day's) main sleep, filed under the day it ended (the wake-up day). Minutes are whole numbers. */
+/**
+ * One sleep (a night or a nap), filed under the day it ended (the wake-up day). Minutes are whole numbers.
+ * Every sleep Health Connect has is kept on its own, whatever its time or length.
+ */
 @Serializable
 data class SleepNight(
     val day: String,
@@ -33,11 +36,6 @@ object Sleep {
     const val AWAKE_IN_BED = 7
     private val AWAKE_TYPES = setOf(AWAKE, OUT_OF_BED, AWAKE_IN_BED)
 
-    /** Pieces of a sleep closer than this are one sleep (the watch sometimes splits a night). */
-    const val MERGE_GAP_MIN = 60L
-    /** Shorter than this isn't counted as a main sleep. */
-    const val MIN_SLEEP_MIN = 60L
-
     data class Stage(val type: Int, val start: LocalDateTime, val end: LocalDateTime)
     data class Session(val start: LocalDateTime, val end: LocalDateTime, val stages: List<Stage> = emptyList())
 
@@ -46,24 +44,12 @@ object Sleep {
 
     private fun minutes(a: LocalDateTime, b: LocalDateTime) = Duration.between(a, b).toMinutes().coerceAtLeast(0)
 
-    /**
-     * One main sleep per wake-up day: pieces less than an hour apart are joined, then each day keeps its
-     * longest sleep (naps that day are left out). Days are calendar days of the end time, since a "night"
-     * can end at any hour.
-     */
-    fun nights(sessions: List<Session>): List<SleepNight> {
-        val merged = mutableListOf<Session>()
-        for (s in sessions.filter { it.end.isAfter(it.start) }.sortedBy { it.start }) {
-            val last = merged.lastOrNull()
-            if (last != null && minutes(last.end, s.start) <= MERGE_GAP_MIN) {
-                merged[merged.lastIndex] = Session(last.start, maxOf(last.end, s.end), last.stages + s.stages)
-            } else merged += s
-        }
-        return merged.filter { minutes(it.start, it.end) >= MIN_SLEEP_MIN }
-            .groupBy { it.end.toLocalDate() }
-            .map { (day, list) -> night(day.toString(), list.maxBy { minutes(it.start, it.end) }) }
-            .sortedBy { it.day }
-    }
+    /** Every sleep on its own (naps included, any time, any length), filed under the day it ended, in time order. */
+    fun sleeps(sessions: List<Session>): List<SleepNight> =
+        sessions.filter { it.end.isAfter(it.start) }.sortedBy { it.start }.map { night(it.end.toLocalDate().toString(), it) }
+
+    /** The sleeps grouped by wake-up day. */
+    fun byDay(sleeps: List<SleepNight>): Map<String, List<SleepNight>> = sleeps.groupBy { it.day }.mapValues { (_, l) -> l.sortedBy { it.start } }
 
     private fun night(day: String, s: Session): SleepNight {
         fun stage(types: Set<Int>) = s.stages.filter { it.type in types }.sumOf { minutes(it.start, it.end) }.toInt()
@@ -75,18 +61,32 @@ object Sleep {
         )
     }
 
-    fun hours(n: SleepNight): String = "%.1f".format(java.util.Locale.US, n.asleepMin / 60.0)
+    fun hours(n: SleepNight): String = hours(n.asleepMin)
+    fun hours(minutes: Int): String = "%.1f".format(java.util.Locale.US, minutes / 60.0)
 
-    /** The daily note's frontmatter: plain numbers so Dataview can chart them. */
-    fun frontmatter(n: SleepNight): Map<String, String?> = linkedMapOf(
-        "sleep_start" to n.start,
-        "sleep_end" to n.end,
-        "sleep_hours" to hours(n),
-        "sleep_deep_min" to n.deepMin.toString(),
-        "sleep_rem_min" to n.remMin.toString(),
-        "sleep_light_min" to n.lightMin.toString(),
-        "sleep_awake_min" to n.awakeMin.toString(),
-    )
+    /** The day's longest sleep (its "main" sleep). */
+    fun main(day: List<SleepNight>): SleepNight? = day.maxByOrNull { Duration.between(LocalDateTime.parse(it.start, STAMP), LocalDateTime.parse(it.end, STAMP)).toMinutes() }
+
+    /**
+     * The daily note's frontmatter for a wake-up day: totals over all its sleeps, how many there were, and the
+     * longest one's times. Plain numbers so Dataview can chart them.
+     */
+    fun frontmatter(day: List<SleepNight>): Map<String, String?> {
+        val m = main(day) ?: return emptyMap()
+        val total = day.sumOf { it.asleepMin }
+        return linkedMapOf(
+            "sleep_hours" to hours(total),
+            "sleep_count" to day.size.toString(),
+            "sleep_main_hours" to hours(m),
+            "sleep_nap_min" to (total - m.asleepMin).toString(),
+            "sleep_start" to m.start,
+            "sleep_end" to m.end,
+            "sleep_deep_min" to day.sumOf { it.deepMin }.toString(),
+            "sleep_rem_min" to day.sumOf { it.remMin }.toString(),
+            "sleep_light_min" to day.sumOf { it.lightMin }.toString(),
+            "sleep_awake_min" to day.sumOf { it.awakeMin }.toString(),
+        )
+    }
 
     private fun clock(stamp: String) = CLOCK.format(LocalDateTime.parse(stamp, STAMP))
 
@@ -94,29 +94,45 @@ object Sleep {
     fun logLine(n: SleepNight): String =
         "- ${n.day} — ${clock(n.start)} → ${clock(n.end)} · ${hours(n)} h asleep · deep ${n.deepMin} · REM ${n.remMin} · light ${n.lightMin} · awake ${n.awakeMin}"
 
-    /** Put each night's line in the log: a night already there is replaced, a new one is added in date order. */
-    fun applyLog(text: String, nights: List<SleepNight>): String {
+    private val LOG_LINE = Regex("^- (\\d{4}-\\d{2}-\\d{2}) — (\\d{2}:\\d{2}) → ")
+
+    /**
+     * Put each given day's sleeps in the log, one line per sleep: that day's old lines are replaced by the
+     * new set (so a re-import never duplicates), and days stay in date and time order.
+     */
+    fun applyLog(text: String, days: Map<String, List<SleepNight>>): String {
         val nl = if (text.contains("\r\n")) "\r\n" else "\n"
-        val lines = (if (text.isBlank()) "# Sleep log\n\nFrom the Galaxy Watch via Health Connect, written by Grove. One line per wake-up day.\n" else text)
+        val lines = (if (text.isBlank()) "# Sleep log\n\nFrom the Galaxy Watch via Health Connect, written by Grove. One line per sleep (naps included), under the day it ended.\n" else text)
             .split(nl).toMutableList()
-        for (n in nights) {
-            val line = logLine(n)
-            val at = lines.indexOfFirst { it.startsWith("- ${n.day} — ") }
-            if (at >= 0) { lines[at] = line; continue }
-            // After the last earlier day, or after the last log line.
-            val logLines = lines.withIndex().filter { Regex("^- \\d{4}-\\d{2}-\\d{2} — ").containsMatchIn(it.value) }
-            val before = logLines.lastOrNull { it.value.substring(2, 12) < n.day }
-            val pos = when {
-                before != null -> before.index + 1
-                logLines.isNotEmpty() -> logLines.first().index
-                else -> { while (lines.isNotEmpty() && lines.last().isEmpty()) lines.removeAt(lines.lastIndex); lines += ""; lines.size }
+        for ((day, sleeps) in days.toSortedMap()) {
+            val old = lines.withIndex().filter { LOG_LINE.find(it.value)?.groupValues?.get(1) == day }.map { it.index }
+            var pos = old.firstOrNull()
+            for (i in old.reversed()) lines.removeAt(i)
+            if (pos == null) {
+                val log = lines.withIndex().mapNotNull { (i, l) -> LOG_LINE.find(l)?.let { i to it.groupValues[1] } }
+                val before = log.lastOrNull { it.second < day }
+                pos = when {
+                    before != null -> before.first + 1
+                    log.isNotEmpty() -> log.first().first
+                    else -> { while (lines.isNotEmpty() && lines.last().isEmpty()) lines.removeAt(lines.lastIndex); lines += ""; lines.size }
+                }
             }
-            lines.add(pos, line)
+            lines.addAll(pos, sleeps.sortedBy { it.start }.map { logLine(it) })
         }
         val out = lines.joinToString(nl)
         return if (out.endsWith(nl)) out else out + nl
     }
 
-    /** The sleep that ended on Grove's day (or the calendar day after it), for the quiet line on Today. */
-    fun latest(data: AppData): SleepNight? = data.sleepNights.lastOrNull { it.day >= data.currentDay }
+    /** Sleeps that ended on Grove's day (or the calendar day after it, before Morning practice), for the quiet line on Today. */
+    fun latestDay(data: AppData): List<SleepNight> {
+        val day = data.sleepNights.lastOrNull { it.day >= data.currentDay }?.day ?: return emptyList()
+        return data.sleepNights.filter { it.day == day }
+    }
+
+    /** "Slept 7.0 h · 3 sleeps" or "Slept 7.0 h · 01:42 → 09:15". */
+    fun summary(day: List<SleepNight>): String? {
+        val m = main(day) ?: return null
+        val total = hours(day.sumOf { it.asleepMin })
+        return if (day.size == 1) "Slept $total h · ${clock(m.start)} → ${clock(m.end)}" else "Slept $total h · ${day.size} sleeps (longest ${hours(m)} h)"
+    }
 }

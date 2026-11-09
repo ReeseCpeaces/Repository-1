@@ -67,31 +67,32 @@ object SleepImport {
         }
         // Only nights whose wake-up day is fully covered by this read.
         val firstDay = local(from).toLocalDate().plusDays(1).toString()
-        val nights = Sleep.nights(sessions).filter { last == null || it.day >= firstDay }
-        val changed = nights.filter { n -> data.sleepNights.none { it == n } }
+        val days = Sleep.byDay(Sleep.sleeps(sessions).filter { last == null || it.day >= firstDay })
+        // Only days whose set of sleeps is new or different get written.
+        val changed = days.filter { (day, list) -> data.sleepNights.filter { it.day == day }.sortedBy { it.start } != list }
         val newest = records.maxOf { it.endTime }
         Store.update(context) { d ->
-            val keep = (d.sleepNights.filter { old -> nights.none { it.day == old.day } } + nights).sortedBy { it.day }.takeLast(60)
+            val keep = (d.sleepNights.filter { it.day !in days.keys } + days.values.flatten()).sortedBy { it.start }.takeLast(400)
             d.copy(sleepNights = keep, lastSleepImportEnd = maxOf(newest, last ?: newest).toString())
         }
         if (changed.isNotEmpty()) write(context, Store.get(context), changed)
-        return changed.size
+        return changed.values.sumOf { it.size }
     }
 
-    /** Frontmatter in each wake-up day's note, and the log lines. A note that can't be read is never written. */
-    private fun write(context: Context, data: AppData, nights: List<SleepNight>) {
+    /** Day totals in each wake-up day's note, and one log line per sleep. A note that can't be read is never written. */
+    private fun write(context: Context, data: AppData, days: Map<String, List<SleepNight>>) {
         if (data.settings.vaultUri.isEmpty()) return
         val root = DocumentFile.fromTreeUri(context, Uri.parse(data.settings.vaultUri)) ?: return
         val resolver = context.contentResolver
         fun read(f: DocumentFile) = runCatching { resolver.openInputStream(f.uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
         fun save(f: DocumentFile, text: String) = resolver.openOutputStream(f.uri, "wt")?.use { it.write(text.encodeToByteArray()) }
-        for (n in nights) {
-            val d = Logic.date(n.day)
+        for ((day, list) in days) {
+            val d = Logic.date(day)
             val rel = NoteText.path(data.settings.dailyNotePath, d)
             // Today's or the next note may not exist yet (woke before Morning practice): make it like Grove does.
-            val note = if (n.day >= data.currentDay) ObsidianSync.findOrCreate(context, root, rel, data, d) else ObsidianSync.find(root, rel)
+            val note = if (day >= data.currentDay) ObsidianSync.findOrCreate(context, root, rel, data, d) else ObsidianSync.find(root, rel)
             val before = note?.let { read(it) } ?: continue
-            val after = NoteText.setFrontmatter(before, Sleep.frontmatter(n))
+            val after = NoteText.setFrontmatter(before, Sleep.frontmatter(list))
             if (after != before) save(note, after)
         }
         val path = data.settings.sleepLogPath.trim('/').ifEmpty { "Health/Sleep log.md" }
@@ -104,7 +105,7 @@ object SleepImport {
             save(log, "")
         }
         val before = read(log) ?: return
-        val after = Sleep.applyLog(before, nights)
+        val after = Sleep.applyLog(before, days)
         if (after != before) save(log, after)
     }
 }
