@@ -94,34 +94,14 @@ object Sleep {
     fun logLine(n: SleepNight): String =
         "- ${n.day} — ${clock(n.start)} → ${clock(n.end)} · ${hours(n)} h asleep · deep ${n.deepMin} · REM ${n.remMin} · light ${n.lightMin} · awake ${n.awakeMin}"
 
-    private val LOG_LINE = Regex("^- (\\d{4}-\\d{2}-\\d{2}) — (\\d{2}:\\d{2}) → ")
-
     /**
      * Put each given day's sleeps in the log, one line per sleep: that day's old lines are replaced by the
      * new set (so a re-import never duplicates), and days stay in date and time order.
      */
-    fun applyLog(text: String, days: Map<String, List<SleepNight>>): String {
-        val nl = if (text.contains("\r\n")) "\r\n" else "\n"
-        val lines = (if (text.isBlank()) "# Sleep log\n\nFrom the Galaxy Watch via Health Connect, written by Grove. One line per sleep (naps included), under the day it ended.\n" else text)
-            .split(nl).toMutableList()
-        for ((day, sleeps) in days.toSortedMap()) {
-            val old = lines.withIndex().filter { LOG_LINE.find(it.value)?.groupValues?.get(1) == day }.map { it.index }
-            var pos = old.firstOrNull()
-            for (i in old.reversed()) lines.removeAt(i)
-            if (pos == null) {
-                val log = lines.withIndex().mapNotNull { (i, l) -> LOG_LINE.find(l)?.let { i to it.groupValues[1] } }
-                val before = log.lastOrNull { it.second < day }
-                pos = when {
-                    before != null -> before.first + 1
-                    log.isNotEmpty() -> log.first().first
-                    else -> { while (lines.isNotEmpty() && lines.last().isEmpty()) lines.removeAt(lines.lastIndex); lines += ""; lines.size }
-                }
-            }
-            lines.addAll(pos, sleeps.sortedBy { it.start }.map { logLine(it) })
-        }
-        val out = lines.joinToString(nl)
-        return if (out.endsWith(nl)) out else out + nl
-    }
+    fun applyLog(text: String, days: Map<String, List<SleepNight>>): String = DayLog.apply(
+        text, "# Sleep log\n\nFrom the Galaxy Watch via Health Connect, written by Grove. One line per sleep (naps included), under the day it ended.\n",
+        days.mapValues { (_, l) -> l.sortedBy { it.start }.map { logLine(it) } },
+    )
 
     /** Sleeps that ended on Grove's day (or the calendar day after it, before Morning practice), for the quiet line on Today. */
     fun latestDay(data: AppData): List<SleepNight> {

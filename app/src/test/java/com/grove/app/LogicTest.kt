@@ -585,4 +585,36 @@ class LogicTest {
         val note = com.grove.app.obsidian.NoteText.setFrontmatter("---\nread: false\n---\n## Daily Log\n", S.frontmatter(days.getValue("2026-11-09")))
         assertTrue(note, note.startsWith("---\nread: false\nsleep_hours: 0.7\nsleep_count: 1\n") && note.endsWith("---\n## Daily Log\n"))
     }
+
+    // ----- weight from Health Connect -----
+
+    @Test fun weighInsJoinBodyNumbersAndFileByDay() {
+        val B = com.grove.app.data.Body
+        fun t(x: String) = LocalDateTime.parse(x)
+        fun r(x: String, v: Double) = com.grove.app.data.Body.Reading(t(x), v)
+        val all = B.weighIns(
+            weightsLb = listOf(r("2026-11-09T21:49", 248.94), r("2026-11-09T07:02", 250.0), r("2026-11-08T07:10", 255.3)),
+            fatPct = listOf(r("2026-11-09T21:49", 35.9), r("2026-11-09T07:30", 99.0)), // the second is too far from any weigh-in
+            leanLb = listOf(r("2026-11-09T21:50", 151.7)),
+            boneLb = emptyList(),
+        )
+        assertEquals(listOf("2026-11-08T07:10", "2026-11-09T07:02", "2026-11-09T21:49"), all.map { it.time })
+        assertEquals(null, all[1].fatPct)
+        val evening = all[2]
+        assertEquals("- 2026-11-09 21:49 — 248.9 lb · fat 89.4 lb (35.9%) · lean 151.7 lb", B.logLine(evening))
+        assertEquals("- 2026-11-08 07:10 — 255.3 lb", B.logLine(all[0]))
+        // The note gets the day's first weigh-in (morning) and the count; missing body numbers are left out.
+        val days = B.byDay(all)
+        assertEquals(mapOf("weight_lb" to "250.0", "weight_time" to "2026-11-09T07:02", "weight_count" to "2"), B.frontmatter(days.getValue("2026-11-09")))
+        // The log: one line per weigh-in, re-imports replace a day's lines, other lines untouched.
+        val log = B.applyLog("", days)
+        assertEquals(3, log.lines().count { it.startsWith("- 2026-") })
+        val again = B.applyLog(log + "My own note\n", mapOf("2026-11-09" to days.getValue("2026-11-09")))
+        assertEquals(3, again.lines().count { it.startsWith("- 2026-") })
+        assertTrue(again.contains("My own note"))
+        // Today: the latest weigh-in and the change since the last day's.
+        val d = migrated().copy(currentDay = "2026-11-09", weighIns = all)
+        assertEquals("248.9 lb (−6.4 since last)", B.summary(d))
+        assertEquals(null, B.summary(d.copy(currentDay = "2026-11-10")))
+    }
 }

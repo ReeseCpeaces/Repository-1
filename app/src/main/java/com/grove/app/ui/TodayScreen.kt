@@ -61,6 +61,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                             com.grove.app.data.Sleep.summary(com.grove.app.data.Sleep.latestDay(data))?.let { line ->
                                 Text(line, fontSize = 12.sp, color = GroveColors.Muted)
                             }
+                            com.grove.app.data.Body.summary(data)?.let { line -> Text(line, fontSize = 12.sp, color = GroveColors.Muted) }
                         }
                     }
                     IconButton(onClick = { go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings") }

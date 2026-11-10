@@ -211,6 +211,9 @@ data class Settings(
     /** Read sleep from Health Connect (Galaxy Watch) into the daily note and Health/Sleep log.md. */
     val sleepImport: Boolean = false,
     val sleepLogPath: String = "Health/Sleep log.md",
+    /** Read weigh-ins from Health Connect (Withings Body+) into the daily note and Health/Weight log.md. */
+    val weightImport: Boolean = false,
+    val weightLogPath: String = "Health/Weight log.md",
 )
 
 /** What got done on one logical day. */
@@ -272,6 +275,9 @@ data class AppData(
     val lastSleepImportEnd: String = "",
     /** 2 = every sleep kept on its own (before that, 0.1.32 kept only the longest per day). */
     val sleepFormat: Int = 0,
+    /** Imported weigh-ins (pounds), and the time of the latest one read from Health Connect (ISO instant). */
+    val weighIns: List<WeighIn> = emptyList(),
+    val lastWeightImportEnd: String = "",
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

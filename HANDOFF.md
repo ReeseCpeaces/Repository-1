@@ -120,6 +120,21 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   - **No notifications.** Only a quiet line under Today's title: "Slept 7.4 h · 2 sleeps (longest 7.0 h)", or
     "Slept 7.0 h · 01:42 → 09:15" when there was one.
   - The connector doesn't read sleep yet; the server chat plans an assistant tool, a Dataview chart and a wall card.
+- **Weight from the Withings Body+ (Nov 2026)** (`data/Body.kt` pure + tested, `obsidian/BodyImport.kt`, same pattern as
+  sleep; the log writer is shared in `data/DayLog.kt`): Withings app → Health Connect → Grove, read-only `WeightRecord`,
+  `BodyFatRecord`, `LeanBodyMassRecord`, `BoneMassRecord` (body water isn't read). Reese's setup: Withings app ›
+  Settings › Health Connect › share Weight, Body fat, Lean body mass; then Grove › Settings › "Connect weight from
+  Health Connect" (`Settings.weightImport`). Runs with sleep on app open and the day ticks, on its own worker thread.
+  - First import reads everything Health Connect allows (asks for READ_HEALTH_DATA_HISTORY; without it Health Connect
+    gives about 30 days before the first grant). After that it re-reads from the day before the last weigh-in
+    (`AppData.lastWeightImportEnd`) and rewrites only days that changed. All weigh-ins are kept in `AppData.weighIns`.
+  - Pounds, one decimal; body fat %. Body readings within 5 minutes of a weight reading belong to that weigh-in.
+  - The day's note (calendar day of the weigh-in) gets the **first** weigh-in of the day: `weight_lb`, `body_fat_pct`,
+    `fat_lb` (weight × fat %), `lean_lb` (Health Connect's lean body mass), `bone_lb`, `weight_time`
+    (`yyyy-MM-ddTHH:mm`), `weight_count`. Keys the scale didn't send are left out. Past days: only notes that exist.
+  - `Health/Weight log.md` (`Settings.weightLogPath`, created if missing): one line per weigh-in in date/time order,
+    `- 2026-11-09 21:49 — 248.9 lb · fat 89.4 lb (35.9%) · lean 151.7 lb`; re-imports replace a day's lines.
+  - No notifications; a quiet "248.9 lb (−6.4 since last)" under Today's title on a day with a weigh-in.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
 - **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a

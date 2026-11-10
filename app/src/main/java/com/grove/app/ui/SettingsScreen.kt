@@ -108,6 +108,9 @@ fun SettingsScreen(data: AppData, back: () -> Unit) {
             SectionLabel("Sleep (Galaxy Watch)", GroveColors.Green)
             SleepSettings(data) { f -> saveSettings(f) }
 
+            SectionLabel("Weight (Withings)", GroveColors.Green)
+            WeightSettings(data) { f -> saveSettings(f) }
+
             SectionLabel("Your day", GroveColors.Green)
             Text("A new day starts when you check off Morning practice, or at this hour if you haven't:", fontSize = 13.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -211,6 +214,51 @@ private fun SleepSettings(data: AppData, save: ((com.grove.app.data.Settings) ->
                 Text("Import sleep now")
             }
             OutlinedButton(onClick = { save { it.copy(sleepImport = false) } }, modifier = Modifier.fillMaxWidth()) { Text("Turn off sleep import") }
+        }
+    }
+}
+
+/** Connect Health Connect for weigh-ins (read-only), show whether it's on, and import now. */
+@Composable
+private fun WeightSettings(data: AppData, save: ((com.grove.app.data.Settings) -> com.grove.app.data.Settings) -> Unit) {
+    val context = LocalContext.current
+    val BI = com.grove.app.obsidian.BodyImport
+    var available by remember { mutableStateOf<Boolean?>(null) }
+    var granted by remember { mutableStateOf(false) }
+    var check by remember { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(check) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            available = com.grove.app.obsidian.SleepImport.available(context)
+            granted = BI.granted(context)
+        }
+    }
+    val ask = rememberLauncherForActivityResult(androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()) { got ->
+        if (BI.WEIGHT in got) {
+            save { it.copy(weightImport = true) }
+            Thread { BI.importIfOn(context.applicationContext, force = true) }.start()
+        }
+        check++
+    }
+    val last = data.weighIns.maxByOrNull { it.time }
+    Text(
+        when {
+            available == false -> "Health Connect isn't available on this phone."
+            data.settings.weightImport && granted -> "On. Each day's first weigh-in goes into that day's note, every weigh-in into ${data.settings.weightLogPath}." +
+                (last?.let { " Last: ${it.day}, ${com.grove.app.data.Body.one(it.weightLb)} lb." } ?: "")
+            else -> "Grove can read your weigh-ins (read-only) from Health Connect. First, in the Withings app: Settings › Health Connect › share Weight, Body fat and Lean body mass."
+        },
+        fontSize = 13.sp, color = GroveColors.Muted,
+    )
+    if (available == true) {
+        if (!granted || !data.settings.weightImport) {
+            OutlinedButton(onClick = { ask.launch(BI.PERMISSIONS + BI.HISTORY + com.grove.app.obsidian.SleepImport.BACKGROUND) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Connect weight from Health Connect")
+            }
+        } else {
+            OutlinedButton(onClick = { Thread { BI.importIfOn(context.applicationContext, force = true) }.start() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Import weigh-ins now")
+            }
+            OutlinedButton(onClick = { save { it.copy(weightImport = false) } }, modifier = Modifier.fillMaxWidth()) { Text("Turn off weight import") }
         }
     }
 }

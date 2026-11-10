@@ -22,10 +22,11 @@ class HealthPrivacyActivity : ComponentActivity() {
             GroveTheme {
                 Surface(Modifier.fillMaxSize(), color = GroveColors.Bg, contentColor = GroveColors.Text) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Title("Grove and your sleep data")
-                        Text("Grove only reads your sleep sessions (with their stages) from Health Connect. It never writes health data and " +
-                            "never sends it anywhere except your own Obsidian vault: the sleep times and minutes go into that day's daily note " +
-                            "and one line in Health/Sleep log.md. You can turn this off in Grove's Settings or in Health Connect at any time.",
+                        Title("Grove and your health data")
+                        Text("Grove only reads your sleep sessions (with their stages) and your weigh-ins (weight, body fat, lean and bone " +
+                            "mass) from Health Connect. It never writes health data and never sends it anywhere except your own Obsidian " +
+                            "vault: the numbers go into that day's daily note and Health/Sleep log.md or Health/Weight log.md. You can turn " +
+                            "each off in Grove's Settings or in Health Connect at any time.",
                             fontSize = 15.sp)
                         TextButton(onClick = { finish() }) { Text("Close") }
                     }
