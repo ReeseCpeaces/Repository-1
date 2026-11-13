@@ -170,8 +170,13 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   - **In the daily note:** Grove's section of *today's* note lists open to-dos as `- [ ] To-do: …`; a finished one
     leaves the list (Nov 1, 2026: Reese's template no longer has a Dataview to-do list, so this is the one list).
     Ticking one there checks it off in Grove (`NoteText.tickedTodos`, read when the note syncs and when the app
-    opens). When the day rolls over, yesterday's section keeps `- [x] To-do: …` for what was finished that day
-    (`Settings.todoDoneRecord`, on by default).
+    opens). **Earlier days keep their whole list** (Nov 13, 2026; `Settings.todoDoneRecord`, on by default):
+    `- [ ] To-do: …` for every to-do that was still open at the end of that day (added by then, `Todos.onListOn`)
+    and `- [x] To-do: …` for those finished that day, even on a day where nothing was finished. Ticking an open
+    line in an earlier day's note marks it done **on that day** (`Todos.checkOnDay`; one finished on a later day
+    moves back to it) so Reese can do the bookkeeping later. Only Reese's own ticks count: `DayRecord.todoTicksWritten`
+    remembers which lines Grove itself wrote ticked. On app open (every 15 min at most) Grove re-reads the last 14
+    days' notes (days it has a record for, notes that exist) to pick up such ticks and refresh their lists.
   - **Linked to an Obsidian note** (`Settings.todoNotePath`, e.g. "To-do.md"; `obsidian/TodoNote.kt`,
     runs on one worker thread): the note's `- [ ]` checklist and Grove's to-dos stay in step both ways.
     Each to-do remembers how it looked in the note at the last sync (`inNote`, `noteName`, `noteDone`),

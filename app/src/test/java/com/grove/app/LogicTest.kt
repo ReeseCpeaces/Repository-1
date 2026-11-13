@@ -491,7 +491,7 @@ class LogicTest {
         // Once the day is past, its note records what was finished (unless that's turned off).
         val later = d.copy(currentDay = "2026-10-20")
         val past = com.grove.app.obsidian.ObsidianSync.summary(later, "2026-10-19")
-        assertTrue(past, past.contains("- [x] To-do: Fix the gate") && !past.contains("Call the vet"))
+        assertTrue(past, past.contains("- [x] To-do: Fix the gate") && past.contains("- [ ] To-do: Call the vet"))
         val off = later.copy(settings = later.settings.copy(todoDoneRecord = false))
         assertTrue(!com.grove.app.obsidian.ObsidianSync.summary(off, "2026-10-19").contains("To-do"))
         // Ticked inside Grove's section of the note -> checked off in Grove.
@@ -616,5 +616,28 @@ class LogicTest {
         val d = migrated().copy(currentDay = "2026-11-09", weighIns = all)
         assertEquals("248.9 lb (−6.4 since last)", B.summary(d))
         assertEquals(null, B.summary(d.copy(currentDay = "2026-11-10")))
+    }
+
+    @Test fun earlierNotesKeepTheirWholeToDoListAndTicksThereCountForThatDay() {
+        val T = com.grove.app.data.Todos
+        var d = migrated().copy(currentDay = "2026-11-10")
+        d = T.add(d, "Call the vet", priority = 8)        // added the 10th
+        d = T.add(d, "Fix the gate")
+        d = d.copy(currentDay = "2026-11-11")
+        d = T.add(d, "Buy seeds")                          // added the 11th: not on the 10th's list
+        d = T.toggle(d, d.todos.first { it.name == "Fix the gate" }.id) // done the 11th
+        d = d.copy(currentDay = "2026-11-13")
+        // A day where nothing was finished still keeps its list.
+        val tenth = com.grove.app.obsidian.ObsidianSync.summary(d, "2026-11-10")
+        assertTrue(tenth, tenth.contains("- [ ] To-do: Call the vet #p8\n- [ ] To-do: Fix the gate #p5") && !tenth.contains("Buy seeds"))
+        val eleventh = com.grove.app.obsidian.ObsidianSync.summary(d, "2026-11-11")
+        assertTrue(eleventh, eleventh.contains("- [ ] To-do: Call the vet #p8\n- [ ] To-do: Buy seeds #p5\n- [x] To-do: Fix the gate #p5"))
+        // Ticked later in the 10th's note: done on the 10th (the day it was really done).
+        val back = T.checkOnDay(d, listOf("call the vet"), "2026-11-10")
+        assertEquals("2026-11-10", back.todos.first { it.name == "Call the vet" }.done)
+        // One finished later moves back to the earlier day; one finished earlier stays; not before it existed.
+        assertEquals("2026-11-10", T.checkOnDay(d, listOf("Fix the gate"), "2026-11-10").todos.first { it.name == "Fix the gate" }.done)
+        assertEquals("2026-11-11", T.checkOnDay(d, listOf("Fix the gate"), "2026-11-12").todos.first { it.name == "Fix the gate" }.done)
+        assertEquals("", T.checkOnDay(d, listOf("Buy seeds"), "2026-11-10").todos.first { it.name == "Buy seeds" }.done)
     }
 }

@@ -40,8 +40,9 @@ object Effects {
         TodoNote.syncAsync(context, null, Store.get(context))
         // Create this week's prompt note and write any waiting thoughts.
         PromptNotes.syncAsync(context, null, Store.get(context))
-        // Pick up to-dos ticked in today's note.
+        // Pick up to-dos ticked in today's note, and in the last two weeks' notes (done on that day).
         ObsidianSync.syncAsync(context, null, Store.get(context))
+        ObsidianSync.scanRecentAsync(context)
         // Pick up plant-study sessions added in the note by hand or by Claude.
         ExploreNote.syncAsync(context, null, Store.get(context))
         // Sleep and weigh-ins from Health Connect, if turned on (no notifications). On their own thread:

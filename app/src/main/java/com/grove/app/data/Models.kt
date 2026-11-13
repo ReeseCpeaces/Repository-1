@@ -237,6 +237,8 @@ data class DayRecord(
     val linesWritten: Int = 0,
     /** "Add a line?" prompts already answered or skipped this day (habit/task ids, "reading"). */
     val prompted: List<String> = emptyList(),
+    /** To-dos Grove itself wrote as ticked ("- [x] To-do") in this day's note, so only Reese's own ticks count as new. */
+    val todoTicksWritten: List<String> = emptyList(),
 )
 
 @Serializable

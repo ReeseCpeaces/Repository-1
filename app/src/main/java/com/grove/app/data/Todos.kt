@@ -44,6 +44,25 @@ object Todos {
         return data.copy(todos = data.todos.map { if (it.done.isEmpty() && it.name.trim().lowercase() in keys) it.copy(done = data.currentDay) else it })
     }
 
+    /** The list as it stood on [day]: to-dos added by then and not finished before it (finished that day included). */
+    fun onListOn(data: AppData, day: String): List<Todo> =
+        data.todos.filter { (it.created.isEmpty() || it.created <= day) && (it.done.isEmpty() || it.done >= day) }
+
+    /** Highest priority first, then oldest first (ignoring whether it's done). */
+    fun byPriority(todos: List<Todo>): List<Todo> =
+        todos.sortedWith(compareBy<Todo>({ -priority(it) }, { it.created }, { it.id.drop(1).toIntOrNull() ?: Int.MAX_VALUE }))
+
+    /**
+     * Ticked in an earlier day's note: done on that day. One still open is checked off then; one finished on a
+     * later day moves back to that day (the day it was really done). One finished earlier stays as it is.
+     */
+    fun checkOnDay(data: AppData, names: List<String>, day: String): AppData {
+        val keys = names.map { it.trim().lowercase() }.toSet()
+        return data.copy(todos = data.todos.map {
+            if (it.name.trim().lowercase() in keys && (it.done.isEmpty() || it.done > day) && (it.created.isEmpty() || it.created <= day)) it.copy(done = day) else it
+        })
+    }
+
     fun add(data: AppData, name: String, list: String = "", high: Boolean = false, due: String = "", remind: String = "", priority: Int = DEFAULT_PRIORITY): AppData {
         val (id, d) = Logic.allocateId(data, "d")
         return d.copy(todos = d.todos + Todo(id, name.trim(), list.trim(), high, due, remind, created = data.currentDay,

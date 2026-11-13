@@ -27,7 +27,9 @@ object ObsidianSync {
         val earlier = if (old == null) emptySet() else (old.days.keys + new.days.keys)
             .filter { it != new.currentDay && old.days[it] != new.days[it] }.toSet() +
             // When the day rolls over, yesterday's note swaps its open to-do list for what got done.
-            (if (old != null && old.currentDay.isNotEmpty() && old.currentDay != new.currentDay) setOf(old.currentDay) else emptySet())
+            (if (old != null && old.currentDay.isNotEmpty() && old.currentDay != new.currentDay) setOf(old.currentDay) else emptySet()) +
+            // A to-do checked off, reopened or moved to another day changes those days' lists too.
+            (if (old == null) emptySet() else todoDays(old, new))
         if (old != null && earlier.isEmpty() && old.days[new.currentDay] == new.days[new.currentDay] && old.habits == new.habits &&
             old.tasks == new.tasks && old.goals == new.goals && old.books == new.books && old.explore == new.explore &&
             old.todos == new.todos) return
@@ -77,7 +79,13 @@ object ObsidianSync {
         // day's note keeps a record of the ones finished that day, if that's turned on.
         val T = com.grove.app.data.Todos
         if (day == data.currentDay) for (t in T.open(data)) lines += "- [ ] To-do: ${t.name} ${T.tag(T.priority(t))}"
-        else if (data.settings.todoDoneRecord) for (t in T.sorted(T.doneOn(data, day))) lines += "- [x] To-do: ${t.name} ${T.tag(T.priority(t))}"
+        else if (data.settings.todoDoneRecord) {
+            // An earlier day keeps its whole list: what was still open then, and what got done that day.
+            // Ticking an open one there later marks it done on that day.
+            val list = T.onListOn(data, day)
+            for (t in T.byPriority(list.filter { it.done != day })) lines += "- [ ] To-do: ${t.name} ${T.tag(T.priority(t))}"
+            for (t in T.byPriority(list.filter { it.done == day })) lines += "- [x] To-do: ${t.name} ${T.tag(T.priority(t))}"
+        }
         for (g in data.goals) {
             if (g.kind == com.grove.app.data.GoalKind.PROMPT) {
                 lines += "${g.name}: " + com.grove.app.data.Prompts.status(g.copy(title = ""), d).substringBefore(" · aim")
@@ -92,6 +100,41 @@ object ObsidianSync {
         if (day == data.currentDay) lines += "Streaks: " + data.habits.joinToString(" · ") { "${it.name} ${Logic.streak(data, it)}" }
         Logic.upcomingHolyDays(data, d).firstOrNull()?.let { (h, n) -> lines += "Next holy day: ${h.name} ${Logic.countdown(n)}" }
         return lines.joinToString("\n")
+    }
+
+    /** Earlier days whose to-do list changed between [old] and [new] (a to-do's done day changed). */
+    private fun todoDays(old: AppData, new: AppData): Set<String> {
+        val before = old.todos.associate { it.id to it.done }
+        val out = mutableSetOf<String>()
+        for (t in new.todos) {
+            val was = before[t.id] ?: continue
+            if (was != t.done) { out += was; out += t.done }
+        }
+        return out.filter { it.isNotEmpty() && it < new.currentDay }.toSet()
+    }
+
+    @Volatile private var lastScan = 0L
+
+    /**
+     * On app open: go over the last two weeks' notes (days Grove has a record of, notes that exist), so ticks
+     * added there later count, and each keeps its full to-do list. At most every 15 minutes.
+     */
+    fun scanRecentAsync(context: Context) {
+        val data = Store.get(context)
+        if (data.settings.vaultUri.isEmpty() || data.currentDay.isEmpty()) return
+        val now = System.currentTimeMillis()
+        if (now - lastScan < 15 * 60_000) return
+        lastScan = now
+        worker.execute {
+            runCatching {
+                val root = DocumentFile.fromTreeUri(context, Uri.parse(data.settings.vaultUri)) ?: return@runCatching
+                val today = Logic.date(data.currentDay)
+                for (i in 14 downTo 1) {
+                    val day = today.minusDays(i.toLong()).toString()
+                    if (Store.get(context).days.containsKey(day)) syncDay(context, root, Store.get(context), day, create = false)
+                }
+            }.onFailure { Log.w(TAG, "Recent notes scan failed", it) }
+        }
     }
 
     private fun sync(context: Context, data: AppData, earlier: Set<String> = emptySet()) {
@@ -120,12 +163,28 @@ object ObsidianSync {
                 Store.update(context) { com.grove.app.data.Todos.checkByName(it, ticked) }
                 data = Store.get(context)
             }
+        } else if (data.settings.todoDoneRecord) {
+            // Ticked in an earlier day's note (not one Grove wrote ticked itself): done on that day.
+            val written = (data.days[day]?.todoTicksWritten ?: emptyList()).map { it.trim().lowercase() }.toSet()
+            val mine = NoteText.tickedTodos(before).filter { it.trim().lowercase() !in written }
+            if (mine.isNotEmpty()) {
+                val next = com.grove.app.data.Todos.checkOnDay(data, mine, day)
+                if (next.todos != data.todos) {
+                    Store.update(context) { com.grove.app.data.Todos.checkOnDay(it, mine, day) }
+                    data = Store.get(context)
+                }
+            }
         }
         val rec = data.days[day] ?: DayRecord()
         val pending = rec.lines.drop(rec.linesWritten)
         val after = NoteText.appendLogLines(NoteText.applySummary(NoteText.applyProperties(before, properties(data, day)), summary(data, day)), pending)
         if (after != before) resolver.openOutputStream(note.uri, "wt")?.use { it.write(after.encodeToByteArray()) } ?: return
         if (pending.isNotEmpty()) Store.update(context) { Logic.markLinesWritten(it, day, rec.lines.size) }
+        // Remember which to-dos Grove wrote ticked, so only Reese's own ticks are read back next time.
+        if (day != data.currentDay && data.settings.todoDoneRecord) {
+            val ticks = com.grove.app.data.Todos.onListOn(data, day).filter { it.done == day }.map { it.name.trim() }.sorted()
+            if (rec.todoTicksWritten != ticks) Store.update(context) { Logic.withDay(it, day) { r -> r.copy(todoTicksWritten = ticks) } }
+        }
     }
 
     fun find(root: DocumentFile, rel: String): DocumentFile? =
