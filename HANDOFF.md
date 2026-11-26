@@ -32,7 +32,27 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
 - **Habits:** steps (each can tick an Obsidian property), days of week, reminder times, "keep
   reminding until done" every N minutes, pinned-notification toggle.
 - **Streaks:** one missed day *pauses* a streak, two in a row *reset* it. Total days are tracked too.
-  Only three daily habits keep streaks: Morning practice (h1), Before-bed practice (h2), 15-min house reset (h3).
+  **Since Nov 26, 2026 there are no daily habits left** (Reese: "3 times a week beats 0"; missing one day used to
+  turn into a week of nothing). h1–h3 became weekly practice goals (below). The habit code still works for any
+  habit Reese adds later.
+- **Weekly practice (`Goal.group = "practice"`, kind `sessions`; `Migrate.practice`):** Sphere of Protection 3,
+  Morning prayer + altar moment 3, Evening lection 3, Meditation 3, Journal line 3, 15-min house reset 4 (a week,
+  Monday start, any day, once a day, no streaks; past the target shows `4/3 ★`). New ids; old h1/h2/h3 check-offs
+  count via `Goal.legacySteps` ("habitId:stepIndex:prop", matched by step label) and h3's `legacyHabit`.
+  Each has a `small` version that counts the same. Today shows them in one **"This week"** card (furthest behind on
+  top, met ones last with a check); tap = log today (again = undo), long-press = change target (1–7) and small
+  version. Meditation has `choices` (discursive/contemplative): Grove asks which and ticks that daily-note property
+  (`DayRecord.sessionChoice`); SOP ticks `sphere of protection`, Journal line ticks `Daily Note`. SOP and Meditation
+  have `linePrefix` so "Add a line?" still offers `SOP:` / `Meditation:`. Evening lection, Meditation and Journal
+  line are `evening`. One combined nudge Thursday 15:00 for goals still under half (`Logic.practiceUnderHalf`,
+  quiet hours apply); the 21:00 check-in adds one line "this week SOP 1/3, …". Connector: `grove_log_session(goal,
+  day, choice)` logs them (no goal = the writing goal).
+- **Weekly review** (`data/Review.kt`, `ui/ReviewScreen.kt`, `obsidian/ReviewNote.kt`): Sunday 17:00 one notification
+  (`Settings.weeklyReview`, `reviewTime`) opens a screen with every weekly goal's count and three optional boxes
+  (went well / got in the way / one small change). Save writes `Journal/Weekly reviews/{GGGG}-W{WW}.md`
+  (`Settings.weeklyReviewPath`), or adds/replaces a `## Weekly review` section if that note exists. Saved weeks are
+  in `AppData.reviewedWeeks` (no notification once saved). Also reachable from the "Review" button on the card;
+  on Mon/Tue it reviews the week before.
 - **Weekly goals (no streaks, weeks start Monday):** `Goal` in `Models.kt`, all created by `Migrate.kt`.
   Four of them: writing and field guides (below, which replaced the retired habits h4/h5, whose history
   still counts), My Deepest Me (`prompt`) and Druid exploration (`minutes`), each described further down.
@@ -137,8 +157,10 @@ wake and sleep, not the clock; everything else sits in the 2–6 PM window.
   - No notifications; a quiet "248.9 lb (−6.4 since last)" under Today's title on a day with a weigh-in.
 - **Ids never reused:** `nextId` counter in grove.json (`Logic.allocateId`, connector `new_id`).
   Starts at 27 because t15–t26 were used and deleted before the counter existed.
-- **The day doesn't end at midnight:** it rolls over when Morning practice is checked off, or at a
-  backup cutoff hour (default 2 PM). So Before-bed practice at 3 AM counts for the previous day.
+- **The day doesn't end at midnight:** it rolls over at the **first check-off of a new calendar day** (a weekly
+  practice goal, task, to-do or habit; `Logic.wake`), or at the backup cutoff hour (default 2 PM). Check-offs between
+  midnight and 4 AM (`WAKE_EARLIEST_HOUR`) and evening practice goals never start the next day, so late-night
+  practice still counts for the day before.
 - **Once a week, any day** (`Task.anyDay`): shows every day from Monday until checked off (the day it's done it
   stays crossed out), then waits for next week (`Logic.doneEarlierInWeek`). Its `days` are only the days its
   reminders fire and the 9 PM check-in lists it (`Logic.remindsOn`). Nature time (t3) was converted on Oct 29, 2026

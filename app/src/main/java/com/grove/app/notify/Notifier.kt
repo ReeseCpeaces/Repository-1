@@ -59,7 +59,11 @@ object Notifier {
         val pinned = data.habits.filter { it.pinned && Logic.scheduledOn(it, Logic.date(data.currentDay)) }
         val done = pinned.count { Logic.isDoneToday(data, it) }
         val next = Logic.nextHabit(data)?.takeIf { it.pinned }
-        val title = if (pinned.isNotEmpty() && done == pinned.size) "All habits done today" else "$done of ${pinned.size} habits done"
+        val title = when {
+            pinned.isEmpty() -> "Grove · this week"
+            done == pinned.size -> "All habits done today"
+            else -> "$done of ${pinned.size} habits done"
+        }
         val subtitle = next?.let { "Next: ${it.name}" + (it.reminders.minOrNull()?.let { t -> " · " + Logic.fmtTime(t) } ?: "") } ?: "Nice work."
         val style = NotificationCompat.InboxStyle().setBigContentTitle(title)
         pinned.forEach { h ->
@@ -154,13 +158,31 @@ object Notifier {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openApp(context, 200))
-        items.singleOrNull()?.let { only ->
+        items.singleOrNull()?.takeIf { it.kind == "habit" || it.kind == "task" }?.let { only ->
             b.addAction(0, "Done", receiver(context, 201, ReminderReceiver.ACTION_DONE) {
                 putExtra(ReminderReceiver.EXTRA_KIND, only.kind)
                 putExtra(ReminderReceiver.EXTRA_ID, only.id)
             })
         }
         NotificationManagerCompat.from(context).notify(CHECKIN_ID, b.build())
+    }
+
+    private const val REVIEW_ID = 3
+
+    /** Sunday's "Weekly review": opens the review screen. */
+    fun showReview(context: Context) {
+        if (!allowed(context)) return
+        val i = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(MainActivity.EXTRA_SCREEN, "review")
+        val n = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_stat_grove)
+            .setContentTitle("Weekly review")
+            .setContentText("How did this week go? A few minutes, all optional.")
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(PendingIntent.getActivity(context, 300, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .build()
+        NotificationManagerCompat.from(context).notify(REVIEW_ID, n)
     }
 
     fun cancelCheckIn(context: Context) = NotificationManagerCompat.from(context).cancel(CHECKIN_ID)

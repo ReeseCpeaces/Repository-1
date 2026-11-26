@@ -32,6 +32,7 @@ sealed interface Screen {
     data class Day(val date: String) : Screen
     data class EditTodo(val id: String?) : Screen
     data object PlantStudy : Screen
+    data object Review : Screen
     data class Plant(val id: String) : Screen
 }
 
@@ -75,7 +76,9 @@ class MainActivity : ComponentActivity() {
     private fun handle(intent: Intent?) {
         val habit = intent?.getStringExtra(EXTRA_HABIT)
         val day = intent?.getStringExtra(EXTRA_DAY)
-        if (habit != null) {
+        if (intent?.getStringExtra(EXTRA_SCREEN) == "review") {
+            stack.clear(); stack += Screen.Today; stack += Screen.Review
+        } else if (habit != null) {
             stack.clear(); stack += Screen.Today; stack += Screen.HabitDetail(habit)
         } else if (day != null) {
             stack.clear(); stack += Screen.Today; stack += Screen.Day(day)
@@ -100,6 +103,7 @@ class MainActivity : ComponentActivity() {
             is Screen.EditTask -> EditTaskScreen(data, s.id, s.date, s.time, ::back) { stack[stack.lastIndex] = Screen.EditTodo(null) }
             is Screen.EditTodo -> EditTodoScreen(data, s.id, ::back)
             Screen.PlantStudy -> PlantStudyScreen(data, ::go, ::back)
+            Screen.Review -> ReviewScreen(data, ::back)
             is Screen.Plant -> PlantScreen(data, s.id, ::back)
             is Screen.Day -> DayScreen(data, s.date, ::go, ::back)
         }

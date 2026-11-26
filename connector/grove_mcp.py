@@ -27,6 +27,9 @@ Each book can be linked to its note in the vault's Books folder (notePath); Grov
 lastReadOn, and read: true / finished: date into that note. In a book note `read` means finished;
 in the daily note `read` means some reading was done that day. Tasks repeat on weekdays or monthly, or happen once on a date. To-dos have no date and stay until checked off; each has a priority 1-10 (10 most important,
 default 5) and lists are sorted highest first.
+Daily practice is weekly too (Nov 2026): Sphere of Protection, Morning prayer + altar moment, Evening lection,
+Meditation, Journal line and 15-min house reset each have a target per week (any day, once a day, no streaks; a
+small version counts the same). Log them with grove_log_session.
 "My Deepest Me" is a weekly prompt goal: one numbered prompt a week (read Monday, finish by Friday;
 a slipped prompt stays open). "Druid exploration" counts plant-study minutes toward 20 hours by the
 deadline (weekly target = minutes left / weeks left); sessions live in the plant-study note's Session log. Never put the book's prompt text anywhere; only the user's own words. Changes made
@@ -138,9 +141,11 @@ def grove_log_pages(book: str, pages: int, day: str | None = None) -> str:
 
 
 @mcp.tool()
-def grove_log_session(goal: str | None = None, day: str | None = None) -> str:
-    """Log one session for a weekly session goal (default: the writing goal). One per day. day: YYYY-MM-DD, default today."""
-    return _run(grove.log_session, goal, day)
+def grove_log_session(goal: str | None = None, day: str | None = None, choice: str | None = None) -> str:
+    """Log one session for a weekly session goal: the writing goal by default, or a weekly practice goal by id or part of its
+    name (e.g. "Sphere", "Meditation", "Journal", "house reset"). One per day. day: YYYY-MM-DD, default today.
+    choice: for Meditation, "discursive" or "contemplative" (default the first); it decides which daily-note property is ticked."""
+    return _run(grove.log_session, goal, day, choice)
 
 
 @mcp.tool()

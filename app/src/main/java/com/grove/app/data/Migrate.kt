@@ -88,12 +88,51 @@ object Migrate {
             d = d.copy(migratedExplore = true)
         }
         if (d.promptQueue.size > 200) d = d.copy(promptQueue = d.promptQueue.takeLast(200))
+        // Nov 2026: the daily habits became weekly practice goals ("3 times a week beats 0"). Each piece of
+        // practice is its own goal; old check-offs of the matching steps count as past sessions.
+        if (!d.migratedPractice) d = practice(d)
         // A habit replaced by a goal stays retired, even if an older grove.json brings it back.
         // Its check-ins stay in history.
-        val retired = d.goals.map { it.legacyHabit }.filter { it.isNotEmpty() }.toSet()
+        val retired = (d.goals.map { it.legacyHabit } + d.goals.flatMap { g -> g.legacySteps.map { it.substringBefore(':') } })
+            .filter { it.isNotEmpty() }.toSet()
         if (d.habits.any { it.id in retired }) d = d.copy(habits = d.habits.filter { it.id !in retired })
         d = Todos.prune(d)
         if (d.appliedInbox.size > 500) d = d.copy(appliedInbox = d.appliedInbox.takeLast(500))
         return d
+    }
+
+    /** h1 Morning practice, h2 Before-bed practice and h3 house reset → six weekly practice goals. */
+    private fun practice(input: AppData): AppData {
+        var d = input
+        val h1 = d.habits.firstOrNull { it.id == "h1" }
+        val h2 = d.habits.firstOrNull { it.id == "h2" }
+        val h3 = d.habits.firstOrNull { it.id == "h3" }
+        // Steps whose label has one of [words], as "habitId:index:prop" (found by label, since the steps may have been edited).
+        fun steps(h: Habit?, vararg words: String): List<String> {
+            if (h == null) return emptyList()
+            return h.steps.withIndex().filter { (_, s) -> words.any { it in s.label.lowercase() } }.map { (i, s) -> "${h.id}:$i:${s.prop}" }
+        }
+        val created = d.currentDay.ifEmpty { "2026-11-26" }
+        val goals = listOf(
+            Goal("", "Sphere of Protection", GoalKind.SESSIONS, perWeek = 3, prop = "sphere of protection", created = created,
+                group = Logic.PRACTICE, small = "SOP short form", linePrefix = "SOP", legacySteps = steps(h1, "sphere")),
+            Goal("", "Morning prayer + altar moment", GoalKind.SESSIONS, perWeek = 3, created = created,
+                group = Logic.PRACTICE, small = "One short prayer at the altar", legacySteps = steps(h1, "prayer", "altar")),
+            Goal("", "Evening lection", GoalKind.SESSIONS, perWeek = 3, created = created,
+                group = Logic.PRACTICE, small = "One short passage", evening = true, legacySteps = steps(h2, "lection")),
+            Goal("", "Meditation", GoalKind.SESSIONS, perWeek = 3, created = created,
+                group = Logic.PRACTICE, small = "5 minutes", linePrefix = "Meditation", evening = true,
+                choices = listOf("discursive meditation", "contemplative meditation"), legacySteps = steps(h2, "meditation")),
+            Goal("", "Journal line", GoalKind.SESSIONS, perWeek = 3, prop = "Daily Note", created = created,
+                group = Logic.PRACTICE, small = "One sentence", evening = true, legacySteps = steps(h2, "journal")),
+            Goal("", "15-min house reset", GoalKind.SESSIONS, perWeek = 4, created = created,
+                group = Logic.PRACTICE, small = "5 minutes of tidying", legacyHabit = if (h3 != null) "h3" else ""),
+        )
+        for (g in goals) {
+            if (d.goals.any { it.name == g.name && it.group == Logic.PRACTICE }) continue
+            val (id, next) = Logic.allocateId(d, "g")
+            d = next.copy(goals = next.goals + g.copy(id = id))
+        }
+        return d.copy(habits = d.habits.filter { it.id !in setOf("h1", "h2", "h3") }, migratedPractice = true)
     }
 }

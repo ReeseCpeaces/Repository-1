@@ -49,6 +49,15 @@ object ObsidianSync {
         }
         for (t in data.tasks) if (t.prop.isNotBlank()) props[t.prop] = (props[t.prop] ?: false) || t.id in rec.tasks
         for (g in data.goals) {
+            if (g.choices.isNotEmpty()) {
+                // Ticks the one picked when it was logged; on days from before, the old habit step's own property.
+                val chosen = if (g.id in rec.sessions) rec.sessionChoice[g.id] ?: g.choices.first() else null
+                for (c in g.choices) {
+                    val legacy = g.legacySteps.any { it.split(":", limit = 3).getOrNull(2) == c && Logic.legacyStepDone(rec, it) }
+                    props[c] = (props[c] ?: false) || chosen == c || legacy
+                }
+                continue
+            }
             if (g.prop.isBlank()) continue
             val did = if (g.kind == com.grove.app.data.GoalKind.PAGES) Logic.pagesOn(data, day) > 0 else Logic.sessionLogged(data, day, g)
             props[g.prop] = (props[g.prop] ?: false) || did

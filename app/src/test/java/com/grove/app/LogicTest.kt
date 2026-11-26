@@ -129,8 +129,8 @@ class LogicTest {
 
     @Test fun writingAndReadingBecomeWeeklyGoals() {
         val d = migrated()
-        assertEquals(listOf("h1", "h2", "h3"), d.habits.map { it.id })
-        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES, GoalKind.PROMPT, GoalKind.MINUTES), d.goals.map { it.kind })
+        assertEquals(emptyList<String>(), d.habits.map { it.id }) // h1–h3 became weekly practice goals too
+        assertEquals(listOf(GoalKind.SESSIONS, GoalKind.PAGES, GoalKind.PROMPT, GoalKind.MINUTES) + List(6) { GoalKind.SESSIONS }, d.goals.map { it.kind })
         assertEquals(9, d.books.size)
         assertEquals(2587, d.books.sumOf { it.pages })
         assertTrue(d.goals.none { it.id == "h4" || it.id == "h5" })
@@ -308,13 +308,15 @@ class LogicTest {
         assertTrue(Logic.inQuietHours(s.copy(quietStart = "13:00", quietEnd = "14:00"), java.time.LocalTime.parse("13:30")))
     }
 
-    @Test fun eveningCheckInListsWhatsOpenButNotMorningPractice() {
+    @Test fun eveningCheckInListsWhatsOpenAndWeeklyPracticeInOneLine() {
         var d = migrated() // Monday Oct 19: Laundry (t1) is due
-        assertEquals(listOf("15-min house reset", "Laundry", "Before-bed practice (when you go to bed)"), Logic.checkInItems(d).map { it.label })
-        d = Logic.toggleHabit(d, "h3", LocalDateTime.parse("2026-10-19T15:00"))
+        val items = Logic.checkInItems(d)
+        assertEquals("Laundry", items.first().label)
+        assertEquals("goals", items.last().kind) // one short line for all the weekly practice under target
+        assertTrue(items.last().label, items.last().label.startsWith("this week Sphere of Protection 0/3, "))
         d = Logic.toggleTask(d, "t1", LocalDateTime.parse("2026-10-19T16:00"))
-        assertEquals(listOf("h2"), Logic.checkInItems(d).map { it.id })
-        d = Logic.toggleHabit(d, "h2", LocalDateTime.parse("2026-10-19T22:00"))
+        d = d.copy(goals = d.goals.map { if (it.group == Logic.PRACTICE) it.copy(perWeek = 1) else it })
+        for (g in d.goals.filter { it.group == Logic.PRACTICE }) d = Logic.toggleSession(d, g.id)
         assertEquals(emptyList<Logic.OpenItem>(), Logic.checkInItems(d))
     }
 
@@ -639,5 +641,79 @@ class LogicTest {
         assertEquals("2026-11-10", T.checkOnDay(d, listOf("Fix the gate"), "2026-11-10").todos.first { it.name == "Fix the gate" }.done)
         assertEquals("2026-11-11", T.checkOnDay(d, listOf("Fix the gate"), "2026-11-12").todos.first { it.name == "Fix the gate" }.done)
         assertEquals("", T.checkOnDay(d, listOf("Buy seeds"), "2026-11-10").todos.first { it.name == "Buy seeds" }.done)
+    }
+
+    // ----- weekly practice (Nov 2026) -----
+
+    @Test fun dailyHabitsBecomeWeeklyPracticeGoalsAndOldCheckOffsCount() {
+        val seed = Seed.data(LocalDate.parse("2026-10-19"))
+        // Monday: SOP and contemplative meditation done the old way, as habit steps.
+        val before = seed.copy(days = mapOf("2026-10-19" to DayRecord(steps = mapOf("h1" to listOf(1), "h2" to listOf(2)))))
+        val d = Migrate.run(before)
+        val practice = d.goals.filter { it.group == Logic.PRACTICE }
+        assertEquals(listOf("Sphere of Protection", "Morning prayer + altar moment", "Evening lection", "Meditation", "Journal line", "15-min house reset"),
+            practice.map { it.name })
+        assertEquals(listOf(3, 3, 3, 3, 3, 4), practice.map { it.perWeek })
+        assertTrue(practice.all { it.id.startsWith("g") && it.id.drop(1).toInt() >= 27 }) // new ids
+        assertTrue(d.habits.none { it.id in setOf("h1", "h2", "h3") })
+        val sop = practice[0]
+        val med = practice[3]
+        assertEquals(listOf("h1:1:sphere of protection"), sop.legacySteps)
+        assertEquals(1, Logic.sessionsThisWeek(d, sop))
+        assertEquals(1, Logic.sessionsThisWeek(d, med))
+        val props = com.grove.app.obsidian.ObsidianSync.properties(d)
+        assertEquals(true, props["sphere of protection"])
+        assertEquals(true, props["contemplative meditation"])
+        assertEquals(false, props["discursive meditation"])
+        assertEquals(d, Migrate.run(d)) // only once
+    }
+
+    @Test fun loggingPracticeStartsTheDayButEveningPracticeAfterMidnightDoesNot() {
+        var d = migrated() // Grove day Monday Oct 19
+        val sop = d.goals.first { it.name == "Sphere of Protection" }
+        val med = d.goals.first { it.name == "Meditation" }
+        // 1 AM: evening meditation still counts for Monday; a morning goal before 4 AM doesn't start Tuesday either.
+        d = Logic.toggleSession(d, med.id, LocalDateTime.parse("2026-10-20T01:00"), "discursive meditation")
+        assertEquals("2026-10-19", d.currentDay)
+        assertEquals(true, com.grove.app.obsidian.ObsidianSync.properties(d)["discursive meditation"])
+        assertEquals(d.currentDay, Logic.toggleSession(d, sop.id, LocalDateTime.parse("2026-10-20T03:30")).currentDay)
+        // 7 AM: the first check-off starts Tuesday and counts there.
+        d = Logic.toggleSession(d, sop.id, LocalDateTime.parse("2026-10-20T07:00"))
+        assertEquals("2026-10-20", d.currentDay)
+        assertTrue(sop.id in d.today.sessions)
+        assertEquals("SOP", Logic.pendingLine(d)?.prefix) // "Add a line?" after logging SOP
+        // A task or a to-do checked first does the same.
+        val t = Logic.toggleTask(migrated(), "t1", LocalDateTime.parse("2026-10-20T09:00"))
+        assertEquals("2026-10-20", t.currentDay)
+        // Once a day: tapping again undoes it.
+        assertTrue(sop.id !in Logic.toggleSession(d, sop.id).today.sessions)
+    }
+
+    @Test fun thursdayNudgeOnlyForGoalsUnderHalf() {
+        var d = migrated()
+        val thu = LocalDate.parse("2026-10-22")
+        assertEquals(6, Logic.practiceUnderHalf(d, thu).size)
+        val reset = d.goals.first { it.name == "15-min house reset" } // 4 a week: 2 is half
+        for (day in listOf("2026-10-19", "2026-10-20")) d = Logic.withDay(d, day) { it.copy(sessions = it.sessions + reset.id) }
+        assertTrue(Logic.practiceUnderHalf(d, thu).none { it.id == reset.id })
+    }
+
+    @Test fun weeklyReviewNote() {
+        val R = com.grove.app.data.Review
+        assertEquals("2026-W48", R.label(LocalDate.parse("2026-11-23")))
+        assertEquals(LocalDate.parse("2026-11-23"), R.weekOf(LocalDate.parse("2026-11-29"))) // Sunday: this week
+        assertEquals(LocalDate.parse("2026-11-16"), R.weekOf(LocalDate.parse("2026-11-24"))) // Tuesday: last week
+        assertEquals("Journal/Weekly reviews/2026-W48.md", R.path("Journal/Weekly reviews/{GGGG}-W{WW}.md", LocalDate.parse("2026-11-23")))
+        val d = migrated().copy(currentDay = "2026-11-29")
+        val note = R.note(d, LocalDate.parse("2026-11-23"), listOf("Walked twice", "", "Lay out the altar cloth at night"))
+        assertTrue(note, note.startsWith("# Weekly review · 2026-W48\nNov 23 – Nov 29, 2026\n\n## This week\n- Write the book: 0/3\n"))
+        assertTrue(note, note.contains("- Sphere of Protection: 0/3\n") && note.contains("## What went well?\nWalked twice\n\n## What got in the way?"))
+        assertTrue(note, note.endsWith("## One small change for next week\nLay out the altar cloth at night\n"))
+        // Into an existing weekly note: a "## Weekly review" section, replaced (not duplicated) the second time.
+        val merged = R.mergeInto("# Week 48\nmy notes\n", d, LocalDate.parse("2026-11-23"), listOf("a", "b", "c"))
+        assertTrue(merged, merged.startsWith("# Week 48\nmy notes\n\n## Weekly review\n### This week\n"))
+        val again = R.mergeInto(merged, d, LocalDate.parse("2026-11-23"), listOf("x", "", ""))
+        assertEquals(1, again.lines().count { it == "## Weekly review" })
+        assertTrue(again.contains("\nx\n") && !again.contains("\na\n"))
     }
 }

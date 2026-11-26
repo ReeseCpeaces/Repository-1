@@ -170,7 +170,14 @@ class Grove:
         rec = history.get("days", {}).get(day)
         if not rec:
             return False
-        return g["id"] in rec.get("sessions", []) or bool(g.get("legacyHabit") and rec.get("steps", {}).get(g["legacyHabit"]))
+        if g["id"] in rec.get("sessions", []) or bool(g.get("legacyHabit") and rec.get("steps", {}).get(g["legacyHabit"])):
+            return True
+        # Old habit steps that count as past sessions: "habitId:stepIndex:prop" (same as Logic.legacyStepDone).
+        for entry in g.get("legacySteps", []):
+            parts = entry.split(":", 2)
+            if len(parts) >= 2 and parts[1].isdigit() and int(parts[1]) in rec.get("steps", {}).get(parts[0], []):
+                return True
+        return False
 
     def sessions_this_week(self, history: dict, g: dict, ref: date) -> int:
         ws = self.week_start(ref)
@@ -271,17 +278,24 @@ class Grove:
             msg += f" Streak now {self.streak(eff, x)}."
         return msg + " It reaches the phone when Syncthing syncs and Grove opens."
 
-    def log_session(self, goal: str | None = None, day: str | None = None) -> str:
+    def log_session(self, goal: str | None = None, day: str | None = None, choice: str | None = None) -> str:
         setup, history = self.load_setup(), self.load_history()
         goals = [g for g in setup.get("goals", []) if g["kind"] == "sessions"]
-        g = next((x for x in goals if goal in (None, x["id"]) or (goal and goal.lower() in x["name"].lower())), None)
+        g = next((x for x in goals if (goal is None and x.get("group") != "practice") or goal == x["id"]
+                  or (goal and goal.lower() in x["name"].lower())), None)
         if g is None:
             raise GroveError("No session goal found. Use grove_overview to see goal ids.")
         day = self.check_date(day) or history["currentDay"]
         eff = self.effective_history()
         if self.session_logged(eff, day, g):
             return f"{g['name']} already has a session on {day} (one per day)."
-        self._write_inbox({"id": self.inbox_id(), "type": "session", "day": day, "goal": g["id"]})
+        entry = {"id": self.inbox_id(), "type": "session", "day": day, "goal": g["id"]}
+        if g.get("choices"):
+            picked = next((c for c in g["choices"] if choice and choice.lower() in c.lower()), None) if choice else g["choices"][0]
+            if picked is None:
+                raise GroveError(f"{g['name']} needs one of: {', '.join(g['choices'])}.")
+            entry["choice"] = picked
+        self._write_inbox(entry)
         eff = self.effective_history()
         done, target = self.progress(setup, eff, g, date.fromisoformat(eff["currentDay"]))
         return f"Logged a {g['name']} session on {day}: {done}/{target} this week."
@@ -829,7 +843,13 @@ class Grove:
         bedtime = [f"{h['name']} (when you go to bed)" for h in open_habits if h.get("role") == "bedtime"]
         tasks = [t["name"] for t in self.tasks_on(setup, d, history) if t["id"] not in rec.get("tasks", {})
                  and (not t.get("anyDay") or t["remindDays"][self.weekday_index(d)])]
-        return habits + tasks + bedtime
+        under = []
+        for g in setup.get("goals", []):
+            if g.get("group") == "practice":
+                done, target = self.progress(setup, history, g, d)
+                if done < target:
+                    under.append(f"{g['name']} {done}/{target}")
+        return habits + tasks + bedtime + (["this week " + ", ".join(under)] if under else [])
 
     # ----- reports -----
 

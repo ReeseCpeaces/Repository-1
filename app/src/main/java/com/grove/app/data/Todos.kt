@@ -35,8 +35,11 @@ object Todos {
         data.copy(todos = data.todos.map { if (it.id == id) it.copy(priority = p.coerceIn(MIN_PRIORITY, MAX_PRIORITY)) else it })
 
     /** Check a to-do off for Grove's day, or reopen it. */
-    fun toggle(data: AppData, id: String): AppData =
-        data.copy(todos = data.todos.map { if (it.id == id) it.copy(done = if (it.done.isEmpty()) data.currentDay else "") else it })
+    fun toggle(data: AppData, id: String, now: java.time.LocalDateTime? = null): AppData {
+        val open = data.todos.firstOrNull { it.id == id }?.done?.isEmpty() == true
+        val d = if (now != null && open) Logic.wake(data, now) else data
+        return d.copy(todos = d.todos.map { if (it.id == id) it.copy(done = if (it.done.isEmpty()) d.currentDay else "") else it })
+    }
 
     /** Check off open to-dos by name (ticked in the daily note). */
     fun checkByName(data: AppData, names: List<String>): AppData {

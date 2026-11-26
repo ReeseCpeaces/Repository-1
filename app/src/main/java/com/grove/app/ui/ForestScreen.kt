@@ -326,9 +326,15 @@ fun ForestScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
 private fun moodOf(data: AppData): Mood {
     val morning = data.habits.firstOrNull { it.role == Role.MORNING }
     val bedtime = data.habits.firstOrNull { it.role == Role.BEDTIME }
+    val rec = data.today
+    // Without the old Morning/Before-bed habits: night after an evening practice, day after any check-in.
+    val evening = data.goals.any { it.evening && it.id in rec.sessions }
+    val anything = Logic.doneCount(data) > 0 || rec.sessions.isNotEmpty() || rec.tasks.isNotEmpty() ||
+        rec.pages.isNotEmpty() || data.todos.any { it.done == data.currentDay }
     return when {
         bedtime != null && Logic.isDoneToday(data, bedtime) -> Mood.NIGHT
-        morning == null && Logic.doneCount(data) > 0 -> Mood.DAY
+        bedtime == null && evening -> Mood.NIGHT
+        morning == null && anything -> Mood.DAY
         morning != null && Logic.isDoneToday(data, morning) -> Mood.DAY
         else -> Mood.PREDAWN
     }
@@ -338,9 +344,9 @@ private fun message(data: AppData, mood: Mood, sum: Int): String {
     val done = Logic.doneCount(data)
     val n = data.habits.size
     var m = when (mood) {
-        Mood.PREDAWN -> "Still dark in the grove. Your wolf sleeps until you finish Morning practice."
-        Mood.DAY -> "Daytime. Your wolf is up and keeping watch. $done of $n habits done."
-        Mood.NIGHT -> if (done == n) "Every habit done. Your wolf is howling at the moon." else "Night has fallen after Before-bed practice. $done of $n habits done today."
+        Mood.PREDAWN -> "Still dark in the grove. Your wolf sleeps until your first check-in today."
+        Mood.DAY -> "Daytime. Your wolf is up and keeping watch." + if (n > 0) " $done of $n habits done." else ""
+        Mood.NIGHT -> if (n > 0 && done == n) "Every habit done. Your wolf is howling at the moon." else "Night has fallen after your evening practice. Your wolf is howling at the moon."
     }
     if (sum == 0) m += " The clearing is bare for now: every check-in grows something."
     if (data.habits.any { isDormant(data, it) }) m += " Part of the grove is dormant: check in to bring it back."

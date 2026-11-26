@@ -2,6 +2,7 @@ package com.grove.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -59,7 +60,8 @@ fun shortTitle(b: Book) = b.title.substringBefore(" (").substringBefore(":")
 @Composable
 fun GoalCards(data: AppData, go: (Screen) -> Unit) {
     var logging by remember { mutableStateOf<Goal?>(null) }
-    for (g in data.goals.filter { it.kind != GoalKind.PROMPT && it.kind != GoalKind.MINUTES }) {
+    ThisWeekCard(data, go)
+    for (g in data.goals.filter { it.kind != GoalKind.PROMPT && it.kind != GoalKind.MINUTES && it.group != Logic.PRACTICE }) {
         val done = Logic.progress(data, g)
         val target = Logic.target(data, g)
         Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
@@ -103,6 +105,103 @@ fun GoalCards(data: AppData, go: (Screen) -> Unit) {
     for (g in data.goals.filter { it.kind == GoalKind.MINUTES }) ExploreCard(data, g, go)
     for (g in data.goals.filter { it.kind == GoalKind.PROMPT }) PromptCard(data, g)
     logging?.let { LogPagesDialog(data) { logging = null } }
+}
+
+/**
+ * "This week": the weekly practice goals in one card, furthest behind on top, met ones at the bottom with a check.
+ * Tap a row to add today's session (tap again to undo); long-press to change its target or small version.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun ThisWeekCard(data: AppData, go: (Screen) -> Unit) {
+    val context = LocalContext.current
+    val goals = data.goals.filter { it.group == Logic.PRACTICE }
+    if (goals.isEmpty()) return
+    var choosing by remember { mutableStateOf<Goal?>(null) }
+    var editing by remember { mutableStateOf<Goal?>(null) }
+    val rows = goals.map { g -> Triple(g, Logic.progress(data, g), Logic.target(data, g)) }
+        .sortedWith(compareBy({ it.second >= it.third }, { it.second.toDouble() / it.third.coerceAtLeast(1) }))
+    fun log(g: Goal, choice: String? = null) =
+        Store.update(context) { Logic.toggleSession(it, g.id, java.time.LocalDateTime.now(), choice) }
+    Card(Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("This week", Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { go(Screen.Review) }) { Text("Review", fontSize = 13.sp) }
+            }
+            for ((g, done, target) in rows) {
+                val today = g.id in data.today.sessions
+                val met = done >= target
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .combinedClickable(
+                            onClick = { if (!today && g.choices.size > 1) choosing = g else log(g) },
+                            onLongClick = { editing = g },
+                        ).heightIn(min = 48.dp).padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(g.name, fontSize = 15.sp, color = if (met) GroveColors.Muted else GroveColors.Text)
+                        val small = if (g.small.isNotBlank()) "small: ${g.small}" else ""
+                        val chosen = data.today.sessionChoice[g.id]?.let { " · ${it.substringBefore(' ')}" }.orEmpty()
+                        Text(listOf(small, if (today) "✓ today$chosen" else "").filter { it.isNotEmpty() }.joinToString(" · "),
+                            fontSize = 12.sp, color = if (today) GroveColors.Green else GroveColors.Muted)
+                    }
+                    if (met) Icon(Icons.Filled.Check, "Done this week", tint = GroveColors.Green, modifier = Modifier.size(18.dp).padding(end = 4.dp))
+                    Text(Logic.sessionLabel(done, target).removeSuffix(" this week"), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        color = if (done > target) GroveColors.Amber else GroveColors.Green)
+                }
+            }
+            Text("Tap to add one (once a day). Any day counts; the small version counts the same. Long-press to change.",
+                fontSize = 11.sp, color = GroveColors.Muted)
+        }
+    }
+    choosing?.let { g ->
+        AlertDialog(
+            onDismissRequest = { choosing = null },
+            title = { Text("${g.name}: which one?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    g.choices.forEach { c ->
+                        FilledTonalButton(onClick = { log(g, c); choosing = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text(c.replaceFirstChar { it.uppercase() })
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { choosing = null }) { Text("Cancel") } },
+        )
+    }
+    editing?.let { g -> PracticeGoalDialog(g) { editing = null } }
+}
+
+/** Change a weekly goal's target (1–7 a week) and its small version. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PracticeGoalDialog(g: Goal, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var target by remember { mutableStateOf(g.perWeek) }
+    var small by remember { mutableStateOf(g.small) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(g.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Times a week", fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (1..7).forEach { n -> FilterChip(selected = target == n, onClick = { target = n }, label = { Text("$n") }) }
+                }
+                OutlinedTextField(small, { small = it }, label = { Text("Small version (counts the same)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                Store.update(context) { d -> d.copy(goals = d.goals.map { if (it.id == g.id) it.copy(perWeek = target, small = small.trim()) else it }) }
+                onClose()
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+    )
 }
 
 /** A weekly prompt (My Deepest Me): mull it over all week, add thoughts any time, finish by Friday. */

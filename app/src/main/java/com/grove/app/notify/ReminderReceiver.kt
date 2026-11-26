@@ -24,6 +24,9 @@ class ReminderReceiver : BroadcastReceiver() {
         const val KIND_GOAL = "goal"
         const val KIND_CHECKIN = "checkin"
         const val KIND_TODO = "todo"
+        const val KIND_REVIEW = "review"
+        /** The id of the one combined weekly-practice nudge. */
+        const val PRACTICE = "practice"
 
         /** Shared by the snooze picker. */
         fun snooze(context: Context, kind: String, id: String, minutes: Int) {
@@ -76,12 +79,25 @@ class ReminderReceiver : BroadcastReceiver() {
         Store.refreshDay(context)
         val data = Store.get(context)
         val snooze = data.settings.defaultSnoozeMinutes
+        if (kind == KIND_REVIEW) {
+            if (data.settings.weeklyReview) Notifier.showReview(context)
+            return
+        }
         if (kind == KIND_CHECKIN) {
             if (data.settings.eveningCheckIn) Notifier.showCheckIn(context, Logic.checkInItems(data))
             return
         }
         // Nothing during quiet hours (this also catches alarms set before the hours changed).
         if (Logic.inQuietHours(data.settings, LocalDateTime.now().toLocalTime())) return
+        if (kind == KIND_GOAL && id == PRACTICE) {
+            val under = Logic.practiceUnderHalf(data, Logic.groveToday(data))
+            if (under.isEmpty()) return
+            val day = Logic.groveToday(data)
+            Notifier.showNudge(context, id, "This week",
+                under.joinToString(", ") { "${it.name} ${Logic.progress(data, it, day)}/${Logic.target(data, it, day)}" } +
+                    ". The small version counts.", snooze)
+            return
+        }
         if (kind == KIND_GOAL) {
             val g = data.goals.firstOrNull { it.id == id } ?: return
             // Snoozed nudges fire on the same day; a plain nudge only if its threshold isn't met yet.

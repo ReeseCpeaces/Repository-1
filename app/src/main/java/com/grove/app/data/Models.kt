@@ -113,6 +113,19 @@ data class Goal(
     val tracker: String = "",
     /** Prompts whose note exists or existed; a deleted one is never recreated. */
     val notesMade: List<Int> = emptyList(),
+    // Weekly practice goals (Nov 2026, replaced the daily habits h1–h3):
+    /** "practice" = shown together in Today's "This week" card, with one combined Thursday nudge. */
+    val group: String = "",
+    /** The small version that counts the same, e.g. "SOP short form". */
+    val small: String = "",
+    /** Daily-note properties to pick from when logging (e.g. discursive or contemplative meditation). */
+    val choices: List<String> = emptyList(),
+    /** "Add a line?" prefix offered after logging it ("SOP", "Meditation"), or "". */
+    val linePrefix: String = "",
+    /** Evening practice: logging it after midnight never starts the next day. */
+    val evening: Boolean = false,
+    /** Old habit steps that count as past sessions: "habitId:stepIndex:prop" (prop may be empty). */
+    val legacySteps: List<String> = emptyList(),
 )
 
 /** A plant in the plant study. [months] (1–12) are its best months; all 12 = any time. */
@@ -214,6 +227,10 @@ data class Settings(
     /** Read weigh-ins from Health Connect (Withings Body+) into the daily note and Health/Weight log.md. */
     val weightImport: Boolean = false,
     val weightLogPath: String = "Health/Weight log.md",
+    /** Sunday's weekly review: notification time, and where it's saved ({GGGG} ISO year, {WW} ISO week). */
+    val weeklyReview: Boolean = true,
+    val reviewTime: String = "17:00",
+    val weeklyReviewPath: String = "Journal/Weekly reviews/{GGGG}-W{WW}.md",
 )
 
 /** What got done on one logical day. */
@@ -239,6 +256,8 @@ data class DayRecord(
     val prompted: List<String> = emptyList(),
     /** To-dos Grove itself wrote as ticked ("- [x] To-do") in this day's note, so only Reese's own ticks count as new. */
     val todoTicksWritten: List<String> = emptyList(),
+    /** Goal id -> the choice logged that day (e.g. "contemplative meditation"). */
+    val sessionChoice: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -280,6 +299,10 @@ data class AppData(
     /** Imported weigh-ins (pounds), and the time of the latest one read from Health Connect (ISO instant). */
     val weighIns: List<WeighIn> = emptyList(),
     val lastWeightImportEnd: String = "",
+    /** The daily habits h1–h3 became weekly practice goals. */
+    val migratedPractice: Boolean = false,
+    /** Weeks with a saved weekly review ("2026-W48"). */
+    val reviewedWeeks: List<String> = emptyList(),
 ) {
     val today: DayRecord get() = days[currentDay] ?: DayRecord()
 }

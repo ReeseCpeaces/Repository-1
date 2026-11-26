@@ -392,6 +392,32 @@ def test_todo_priorities():
             pass
 
 
+def test_weekly_practice_goals():
+    g = goal_vault()  # Monday 2026-10-19
+    setup = g.load_setup()
+    setup["goals"] += [
+        {"id": "g60", "name": "Sphere of Protection", "kind": "sessions", "perWeek": 3, "group": "practice",
+         "legacySteps": ["h1:1:sphere of protection"], "created": "2026-10-19"},
+        {"id": "g61", "name": "Meditation", "kind": "sessions", "perWeek": 3, "group": "practice", "evening": True,
+         "choices": ["discursive meditation", "contemplative meditation"], "created": "2026-10-19"},
+    ]
+    g.save_setup(setup)
+    history = json.loads(g.history_path.read_text())
+    history["days"]["2026-10-19"] = {"steps": {"h1": [1]}, "tasks": {}}  # an old SOP step check-off counts
+    g.history_path.write_text(json.dumps(history))
+    assert "Sphere of Protection (id g60): 1/3 sessions this week (logged today)" in g.overview()
+    assert "this week Sphere of Protection 1/3, Meditation 0/3" in g.check_in_items(g.load_setup(), g.load_history())
+    assert "Meditation" in g.log_session("meditation", choice="contemplative")
+    entry = json.loads(next(g.inbox.glob("*.json")).read_text())
+    assert entry["goal"] == "g61" and entry["choice"] == "contemplative meditation"
+    assert "Write the book" in g.log_session(day="2026-10-18")  # no goal named: still the writing goal
+    try:
+        g.log_session("meditation", choice="walking", day="2026-10-18")
+        raise AssertionError("expected GroveError")
+    except GroveError:
+        pass
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

@@ -88,6 +88,29 @@ object AlarmScheduler {
             }
         }
 
+        // Weekly practice: one Thursday 15:00 nudge, only if some practice goal is still under half.
+        run {
+            val thu = Logic.dayInWeek(groveDay, 4)
+            val at = thu.atTime(15, 0)
+            if (!thu.isBefore(groveDay) && at.isAfter(now) && !Logic.inQuietHours(data.settings, at.toLocalTime()) &&
+                Logic.practiceUnderHalf(data, thu).isNotEmpty()) {
+                val code = "nudge|practice|$thu".hashCode()
+                codes += code
+                setExact(context, at, fireIntent(context, code, ReminderReceiver.KIND_GOAL, ReminderReceiver.PRACTICE))
+            }
+        }
+        // Sunday's weekly review (until it's saved for this week).
+        if (data.settings.weeklyReview && com.grove.app.data.Review.label(Logic.weekStart(groveDay)) !in data.reviewedWeeks) {
+            val sun = Logic.dayInWeek(groveDay, 0)
+            val (h, m) = data.settings.reviewTime.split(":").map { it.toInt() }
+            val at = sun.atTime(h, m)
+            if (at.isAfter(now)) {
+                val code = "review|$sun".hashCode()
+                codes += code
+                setExact(context, at, fireIntent(context, code, ReminderReceiver.KIND_REVIEW, ""))
+            }
+        }
+
         // The evening check-in: the last notification of the day, even though quiet hours start then.
         if (data.settings.eveningCheckIn) {
             val (h, m) = data.settings.checkInTime.split(":").map { it.toInt() }

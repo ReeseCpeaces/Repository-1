@@ -47,6 +47,8 @@ data class InboxEntry(
     /** For "habit" and "task" entries: which one, and whether it's done (false undoes it). */
     val item: String = "",
     val done: Boolean = true,
+    /** For a "session" of a goal with choices: which one (e.g. "contemplative meditation"). */
+    val choice: String = "",
 )
 
 /** Check-in history, written for the Grove connector to read. The app never reads it back. */
@@ -213,7 +215,11 @@ object VaultSync {
                 x = Logic.withDay(x, day) { r ->
                     when (e.type) {
                         "pages" -> r.copy(pages = r.pages + (e.book to ((r.pages[e.book] ?: 0) + e.pages).coerceAtLeast(0)))
-                        "session" -> if (e.goal in r.sessions) r else r.copy(sessions = r.sessions + e.goal)
+                        "session" -> if (e.goal in r.sessions) r else r.copy(
+                            sessions = r.sessions + e.goal,
+                            sessionChoice = (e.choice.ifEmpty { x.goals.firstOrNull { it.id == e.goal }?.choices?.firstOrNull().orEmpty() })
+                                .takeIf { it.isNotEmpty() }?.let { r.sessionChoice + (e.goal to it) } ?: r.sessionChoice,
+                        )
                         else -> r
                     }
                 }

@@ -48,6 +48,16 @@ object Logic {
     fun newDayWaiting(data: AppData, now: LocalDateTime): Boolean =
         data.currentDay.isNotEmpty() && now.toLocalDate().isAfter(date(data.currentDay))
 
+    /** Check-offs between midnight and this hour never start the next day (late-night practice counts for the day before). */
+    const val WAKE_EARLIEST_HOUR = 4
+
+    /**
+     * The first check-off of a new calendar day starts it (Nov 2026: there's no Morning practice habit any more).
+     * Only from [WAKE_EARLIEST_HOUR] on; the cutoff hour still rolls the day over as a backup.
+     */
+    fun wake(data: AppData, now: LocalDateTime): AppData =
+        if (newDayWaiting(data, now) && now.hour >= WAKE_EARLIEST_HOUR) startNewDay(data, now) else data
+
     /** Start the calendar's day now, without checking anything off. */
     fun startNewDay(data: AppData, now: LocalDateTime): AppData =
         if (newDayWaiting(data, now)) data.copy(currentDay = key(now.toLocalDate())) else data
@@ -187,6 +197,9 @@ object Logic {
         if (day == data.currentDay && h.role == Role.MORNING) {
             val today = key(now.toLocalDate())
             if (date(today).isAfter(date(d.currentDay))) { d = d.copy(currentDay = today); target = today }
+        } else if (day == data.currentDay && h.role != Role.BEDTIME && !isDone(d, day, h)) {
+            d = wake(d, now)
+            target = d.currentDay
         }
         val done = isDone(d, target, h)
         val live = target == d.currentDay
@@ -214,10 +227,13 @@ object Logic {
     }
 
     /** Check a task off (or undo it) on [day]; for an earlier day no time is recorded. */
-    fun toggleTask(data: AppData, taskId: String, now: LocalDateTime, day: String = data.currentDay): AppData {
-        if (!canMark(data, day)) return data
-        return withDay(data, day) { r ->
-            r.copy(tasks = if (taskId in r.tasks) r.tasks - taskId else r.tasks + (taskId to if (day == data.currentDay) clock(now) else ""))
+    /** Check a task off (or undo it) on [day] (default: today, starting a new day first if it's time); for an earlier day no time is recorded. */
+    fun toggleTask(data: AppData, taskId: String, now: LocalDateTime, day: String? = null): AppData {
+        val d0 = if (day == null && !isTaskDone(data, data.currentDay, taskId)) wake(data, now) else data
+        val target = day ?: d0.currentDay
+        if (!canMark(d0, target)) return d0
+        return withDay(d0, target) { r ->
+            r.copy(tasks = if (taskId in r.tasks) r.tasks - taskId else r.tasks + (taskId to if (target == d0.currentDay) clock(now) else ""))
         }
     }
 
@@ -281,7 +297,8 @@ object Logic {
 
     fun sessionLogged(data: AppData, day: String, g: Goal): Boolean {
         val r = data.days[day] ?: return false
-        return g.id in r.sessions || (g.legacyHabit.isNotEmpty() && r.steps[g.legacyHabit].orEmpty().isNotEmpty())
+        return g.id in r.sessions || (g.legacyHabit.isNotEmpty() && r.steps[g.legacyHabit].orEmpty().isNotEmpty()) ||
+            g.legacySteps.any { legacyStepDone(r, it) }
     }
 
     fun sessionsThisWeek(data: AppData, g: Goal, ref: LocalDate = groveToday(data)): Int =
@@ -289,8 +306,28 @@ object Logic {
 
     fun totalSessions(data: AppData, g: Goal): Int = data.days.keys.count { sessionLogged(data, it, g) }
 
-    fun toggleSession(data: AppData, goalId: String): AppData =
-        withDay(data, data.currentDay) { r -> r.copy(sessions = if (goalId in r.sessions) r.sessions - goalId else r.sessions + goalId) }
+    /** "h1:1:prop" was checked off in that day's record. */
+    fun legacyStepDone(r: DayRecord, entry: String): Boolean {
+        val parts = entry.split(":", limit = 3)
+        val i = parts.getOrNull(1)?.toIntOrNull() ?: return false
+        return i in r.steps[parts[0]].orEmpty()
+    }
+
+    /**
+     * Log (or undo) today's session of a weekly goal. With [now], logging a morning/day goal after the calendar
+     * moved on starts the new day first; evening goals never do. [choice] picks which property it ticks.
+     */
+    fun toggleSession(data: AppData, goalId: String, now: LocalDateTime? = null, choice: String? = null): AppData {
+        val g = data.goals.firstOrNull { it.id == goalId }
+        val d = if (now != null && g?.evening != true && goalId !in data.today.sessions) wake(data, now) else data
+        return withDay(d, d.currentDay) { r ->
+            if (goalId in r.sessions) r.copy(sessions = r.sessions - goalId, sessionChoice = r.sessionChoice - goalId)
+            else r.copy(
+                sessions = r.sessions + goalId,
+                sessionChoice = (choice ?: g?.choices?.firstOrNull())?.let { r.sessionChoice + (goalId to it) } ?: r.sessionChoice,
+            )
+        }
+    }
 
     private fun pagesLogged(data: AppData, bookId: String, before: LocalDate? = null): Int =
         data.days.filter { before == null || date(it.key).isBefore(before) }.values.sumOf { it.pages[bookId] ?: 0 }
@@ -486,6 +523,7 @@ object Logic {
                 t.prop == "tree" || t.id == "t9" -> out += LineItem(t.id, t.name, "Plant")
             }
         }
+        for (g in data.goals) if (g.linePrefix.isNotEmpty()) out += LineItem(g.id, g.name, g.linePrefix)
         data.goals.firstOrNull { it.kind == GoalKind.PAGES }?.let { out += LineItem(READING, it.name, "Reading") }
         return out
     }
@@ -495,7 +533,8 @@ object Logic {
     /** A habit or task checked off today that hasn't been offered "Add a line?" yet (e.g. done from a widget). */
     fun pendingLine(data: AppData): LineItem? = lineItems(data).firstOrNull { item ->
         item.key != READING && wantsLine(data, item.key) &&
-            (data.today.tasks.containsKey(item.key) || data.habits.firstOrNull { it.id == item.key }?.let { isDoneToday(data, it) } == true)
+            (data.today.tasks.containsKey(item.key) || data.habits.firstOrNull { it.id == item.key }?.let { isDoneToday(data, it) } == true ||
+                item.key in data.today.sessions)
     }
 
     /** Save "Prefix: text" for today's note. Reading can be asked again after another log; the rest once a day. */
@@ -526,7 +565,13 @@ object Logic {
         }
     }
 
-    /** Something the evening check-in lists: [kind] is "habit" or "task". */
+    const val PRACTICE = "practice"
+
+    /** Practice goals under half their target on [day] (for the one Thursday nudge). */
+    fun practiceUnderHalf(data: AppData, day: LocalDate): List<Goal> =
+        data.goals.filter { it.group == PRACTICE && progress(data, it, day) * 2 < target(data, it, day) }
+
+    /** Something the evening check-in lists: [kind] is "habit", "task" or "goals" (the weekly line). */
     data class OpenItem(val kind: String, val id: String, val label: String)
 
     /** What's still not done in Grove's day: habits (but not Morning practice) and tasks. */
@@ -535,8 +580,12 @@ object Logic {
         val open = data.habits.filter { it.role != Role.MORNING && scheduledOn(it, day) && !isDone(data, data.currentDay, it) }
         val (bedtime, habits) = open.partition { it.role == Role.BEDTIME }
         val tasks = tasksOn(data, day).filter { !isTaskDone(data, data.currentDay, it.id) && (it.task == null || remindsOn(it.task, day)) }
+        // Weekly practice still under target: one short line, not one per goal.
+        val under = data.goals.filter { it.group == PRACTICE && progress(data, it, day) < target(data, it, day) }
+        val weekly = if (under.isEmpty()) emptyList()
+            else listOf(OpenItem("goals", "", "this week " + under.joinToString(", ") { "${it.name} ${progress(data, it, day)}/${target(data, it, day)}" }))
         // Before-bed practice goes last: it's meant for later.
         return habits.map { OpenItem("habit", it.id, it.name) } + tasks.map { OpenItem("task", it.id, it.name) } +
-            bedtime.map { OpenItem("habit", it.id, "${it.name} (when you go to bed)") }
+            bedtime.map { OpenItem("habit", it.id, "${it.name} (when you go to bed)") } + weekly
     }
 }

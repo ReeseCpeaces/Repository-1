@@ -84,7 +84,7 @@ fun TodayScreen(data: AppData, go: (Screen) -> Unit, tab: (Screen) -> Unit) {
                 // Tap a day to open its hour-by-hour view.
                 WeekStrip(data, day) { go(Screen.Day(it.toString())) }
             }
-            item {
+            if (habits.isNotEmpty()) item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     SectionLabel("Habits  ${Logic.doneCount(data)}/${data.habits.size} done", GroveColors.Green)
                 }
